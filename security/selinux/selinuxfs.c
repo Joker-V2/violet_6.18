@@ -157,6 +157,10 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 		goto out;
 
 	new_value = !!scan_value;
+#ifdef CONFIG_SECURITY_SELINUX_FORCE_PERMISSIVE
+	/* policy not yet updated for this kernel: stay permissive */
+	new_value = 0;
+#endif
 
 	old_value = enforcing_enabled();
 	if (new_value != old_value) {

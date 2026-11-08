@@ -23,6 +23,16 @@ config SECURITY_SELINUX_BOOTPARAM
 
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_SELINUX_FORCE_PERMISSIVE
+	bool "Keep SELinux permissive"
+	depends on SECURITY_SELINUX_DEVELOP
+	default n
+	help
+	  Ignore userspace requests to switch SELinux to enforcing mode
+	  (writes of 1 to /sys/fs/selinux/enforce), so the kernel stays
+	  permissive.  Intended for ports whose userspace policy has not
+	  been updated for the new kernel yet.  If unsure, say N.
+
 config SECURITY_SELINUX_DEVELOP
 	bool "SELinux Development Support"
 	depends on SECURITY_SELINUX
