@@ -98,6 +98,7 @@ struct qcom_ice {
 	struct clk *core_clk;
 	struct clk *iface_clk;
 	bool use_hwkm;
+	bool use_tz_wrapped;
 	bool hwkm_init_complete;
 };
 
@@ -145,6 +146,13 @@ static bool qcom_ice_check_supported(struct qcom_ice *ice)
 	 * ICE-capable storage driver(s) need to know early on whether to
 	 * advertise support for raw keys or wrapped keys, HWKM cannot be used
 	 * unconditionally.  A module parameter is used to opt into using it.
+	 *
+	 * Without HWKM, the TrustZone of older SoCs (such as SM6150) wraps keys
+	 * itself: its keymaster hands out wrapped keys and the key programming
+	 * call unwraps them into a keyslot.  The same module parameter opts
+	 * into that.  The SCM call that derives software secrets is only
+	 * needed for some keys, and the SM6150 TrustZone does not report it as
+	 * available, so it is not checked for here.
 	 */
 	if ((major >= 4 ||
 	     (major == 3 && (minor >= 3 || (minor == 2 && step >= 1)))) &&
@@ -156,7 +164,8 @@ static bool qcom_ice_check_supported(struct qcom_ice *ice)
 			dev_info(dev, "Not using HWKM. Supporting raw keys only.\n");
 		}
 	} else if (qcom_ice_use_wrapped_keys) {
-		dev_warn(dev, "A supported HWKM is not present. Ignoring qcom_ice.use_wrapped_keys=1.\n");
+		dev_info(dev, "A supported HWKM is not present. Using TrustZone-wrapped keys only.\n");
+		ice->use_tz_wrapped = true;
 	} else {
 		dev_info(dev, "A supported HWKM is not present. Supporting raw keys only.\n");
 	}
@@ -312,6 +321,26 @@ static unsigned int translate_hwkm_slot(struct qcom_ice *ice, unsigned int slot)
 	return slot * 2;
 }
 
+/*
+ * Without HWKM, TrustZone unwraps the key itself and sets up the keyslot, as
+ * it does for raw keys.
+ */
+static int qcom_ice_program_tz_wrapped_key(struct qcom_ice *ice,
+					   unsigned int slot,
+					   const struct blk_crypto_key *bkey)
+{
+	int err;
+
+	err = qcom_scm_ice_set_key(slot, bkey->bytes, bkey->size,
+				   QCOM_SCM_ICE_CIPHER_AES_256_XTS,
+				   bkey->crypto_cfg.data_unit_size / 512);
+	if (err)
+		dev_err_ratelimited(ice->dev,
+				    "qcom_scm_ice_set_key failed; err=%d, slot=%u\n",
+				    err, slot);
+	return err;
+}
+
 static int qcom_ice_program_wrapped_key(struct qcom_ice *ice, unsigned int slot,
 					const struct blk_crypto_key *bkey)
 {
@@ -322,6 +351,9 @@ static int qcom_ice_program_wrapped_key(struct qcom_ice *ice, unsigned int slot,
 		.cfge = QCOM_ICE_HWKM_CFG_ENABLE_VAL,
 	};
 	int err;
+
+	if (ice->use_tz_wrapped)
+		return qcom_ice_program_tz_wrapped_key(ice, slot, bkey);
 
 	if (!ice->use_hwkm) {
 		dev_err_ratelimited(dev, "Got wrapped key when not using HWKM\n");
@@ -373,8 +405,8 @@ int qcom_ice_program_key(struct qcom_ice *ice, unsigned int slot,
 	if (blk_key->crypto_cfg.key_type == BLK_CRYPTO_KEY_TYPE_HW_WRAPPED)
 		return qcom_ice_program_wrapped_key(ice, slot, blk_key);
 
-	if (ice->use_hwkm) {
-		dev_err_ratelimited(dev, "Got raw key when using HWKM\n");
+	if (ice->use_hwkm || ice->use_tz_wrapped) {
+		dev_err_ratelimited(dev, "Got raw key when using wrapped keys\n");
 		return -EINVAL;
 	}
 
@@ -416,7 +448,7 @@ EXPORT_SYMBOL_GPL(qcom_ice_evict_key);
  */
 enum blk_crypto_key_type qcom_ice_get_supported_key_type(struct qcom_ice *ice)
 {
-	if (ice->use_hwkm)
+	if (ice->use_hwkm || ice->use_tz_wrapped)
 		return BLK_CRYPTO_KEY_TYPE_HW_WRAPPED;
 	return BLK_CRYPTO_KEY_TYPE_RAW;
 }
@@ -432,6 +464,10 @@ EXPORT_SYMBOL_GPL(qcom_ice_get_supported_key_type);
  * Use HWKM to derive the "software secret" from a hardware-wrapped key that is
  * given in ephemerally-wrapped form.
  *
+ * Without HWKM, TrustZone derives it from the keys its keymaster wrapped.  A
+ * key no longer than a raw AES-256-XTS key was not wrapped by the keymaster;
+ * as on msm-4.14, its secret is its first bytes.
+ *
  * Return: 0 on success; -EBADMSG if the given ephemerally-wrapped key is
  *	   invalid; or another -errno value.
  */
@@ -439,9 +475,23 @@ int qcom_ice_derive_sw_secret(struct qcom_ice *ice,
 			      const u8 *eph_key, size_t eph_key_size,
 			      u8 sw_secret[BLK_CRYPTO_SW_SECRET_SIZE])
 {
-	int err = qcom_scm_derive_sw_secret(eph_key, eph_key_size,
-					    sw_secret,
-					    BLK_CRYPTO_SW_SECRET_SIZE);
+	int err;
+
+	if (ice->use_tz_wrapped) {
+		if (eph_key_size <= BLK_CRYPTO_SW_SECRET_SIZE)
+			return -EBADMSG;
+		if (eph_key_size <= AES_256_XTS_KEY_SIZE) {
+			memcpy(sw_secret, eph_key, BLK_CRYPTO_SW_SECRET_SIZE);
+			return 0;
+		}
+	}
+
+	err = qcom_scm_derive_sw_secret(eph_key, eph_key_size, sw_secret,
+					BLK_CRYPTO_SW_SECRET_SIZE);
+	if (err && ice->use_tz_wrapped)
+		dev_err_ratelimited(ice->dev,
+				    "qcom_scm_derive_sw_secret failed; err=%d, key size=%zu\n",
+				    err, eph_key_size);
 	if (err == -EIO || err == -EINVAL)
 		err = -EBADMSG; /* probably invalid key */
 	return err;
@@ -461,6 +511,9 @@ int qcom_ice_generate_key(struct qcom_ice *ice,
 			  u8 lt_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
 {
 	int err;
+
+	if (!ice->use_hwkm)
+		return -EOPNOTSUPP;
 
 	err = qcom_scm_generate_ice_key(lt_key, QCOM_ICE_HWKM_WRAPPED_KEY_SIZE);
 	if (err)
@@ -487,6 +540,9 @@ int qcom_ice_prepare_key(struct qcom_ice *ice,
 			 u8 eph_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
 {
 	int err;
+
+	if (!ice->use_hwkm)
+		return -EOPNOTSUPP;
 
 	err = qcom_scm_prepare_ice_key(lt_key, lt_key_size,
 				       eph_key, QCOM_ICE_HWKM_WRAPPED_KEY_SIZE);
@@ -515,6 +571,9 @@ int qcom_ice_import_key(struct qcom_ice *ice,
 			u8 lt_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
 {
 	int err;
+
+	if (!ice->use_hwkm)
+		return -EOPNOTSUPP;
 
 	err = qcom_scm_import_ice_key(raw_key, raw_key_size,
 				      lt_key, QCOM_ICE_HWKM_WRAPPED_KEY_SIZE);
