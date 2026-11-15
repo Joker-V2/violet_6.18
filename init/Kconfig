@@ -1177,6 +1177,17 @@ config SCHED_MM_CID
 	def_bool y
 	depends on SMP && RSEQ
 
+config SCHED_TUNE_STUB
+	bool "Stub schedtune cgroup controller"
+	depends on CGROUPS
+	help
+	  Provide a "schedtune" cgroup v1 controller that only stores the
+	  values written to it. Android userspace made for older kernels
+	  mounts it at /dev/stune and fails the whole cgroup setup when the
+	  controller is missing.
+
+	  If unsure, say N.
+
 config UCLAMP_TASK_GROUP
 	bool "Utilization clamping per group of tasks"
 	depends on CGROUP_SCHED
