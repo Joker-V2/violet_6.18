@@ -22,3 +22,14 @@ config DMABUF_HEAPS_CMA_LEGACY
 	  from the CMA area's devicetree node, or "reserved" if the area is not
 	  defined in the devicetree. This uses the same underlying allocator as
 	  CONFIG_DMABUF_HEAPS_CMA.
+
+config DMABUF_HEAPS_MSM_LEGACY_ION
+	bool "Legacy /dev/ion for msm-4.14/4.19 vendor userspace"
+	depends on DMABUF_HEAPS_SYSTEM=y && DMA_CMA
+	select GENERIC_ALLOCATOR
+	help
+	  Provide /dev/ion with the ION API of Linux 4.12-5.x and the msm heap
+	  IDs of msm-4.14/4.19, backed by DMA-BUF: the system heap and the
+	  contiguous heaps the "qcom,msm-ion" DT node describes. Needed by
+	  vendor userspace built against those kernels, such as
+	  libQSEEComAPI. If unsure, say N.
