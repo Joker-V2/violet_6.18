@@ -1,0 +1,258 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Xiaomi Redmi Note 7 Pro (violet)
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include "sm6150.dtsi"
+#include "pm6150.dtsi"
+#include "pm6150l.dtsi"
+
+/*
+ * The video, CDSP and ADSP firmware regions sit lower on violet than on
+ * QCS615; they are re-added below at the addresses violet's firmware uses.
+ */
+/delete-node/ &pil_video_mem;
+/delete-node/ &rproc_cdsp_mem;
+/delete-node/ &rproc_adsp_mem;
+
+/ {
+	model = "Xiaomi Redmi Note 7 Pro";
+	compatible = "xiaomi,violet", "qcom,sm6150";
+	chassis-type = "handset";
+
+	/* The msm-4.14 bootloader picks the DTB by these */
+	qcom,msm-id = <355 0>;
+	qcom,board-id = <34 0>;
+
+	aliases {
+		mmc0 = &sdhc_1;
+	};
+
+	chosen {
+	};
+
+	firmware {
+		android {
+			compatible = "android,firmware";
+			boot_devices = "soc/7c4000.sdhci";
+
+			vbmeta {
+				compatible = "android,vbmeta";
+				parts = "vbmeta,boot,recovery,system,vendor,dtbo";
+			};
+		};
+	};
+
+	clocks {
+		sleep_clk: sleep-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <32000>;
+			#clock-cells = <0>;
+		};
+
+		xo_board_clk: xo-board-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <38400000>;
+			#clock-cells = <0>;
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		pinctrl-0 = <&vol_up_n>;
+		pinctrl-names = "default";
+
+		key-volume-up {
+			label = "Volume Up";
+			gpios = <&pm6150l_gpios 2 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
+			linux,can-disable;
+			wakeup-source;
+		};
+	};
+
+	reserved-memory {
+		hyp_mem: hyp@85700000 {
+			reg = <0x0 0x85700000 0x0 0x600000>;
+			no-map;
+		};
+
+		xbl_aop_mem: xbl-aop@85e00000 {
+			reg = <0x0 0x85e00000 0x0 0x120000>;
+			no-map;
+		};
+
+		sec_apps_mem: sec-apps@85fff000 {
+			reg = <0x0 0x85fff000 0x0 0x1000>;
+			no-map;
+		};
+
+		removed_mem: removed@86200000 {
+			reg = <0x0 0x86200000 0x0 0x2d00000>;
+			no-map;
+		};
+
+		camera_mem: camera@8ab00000 {
+			reg = <0x0 0x8ab00000 0x0 0x500000>;
+			no-map;
+		};
+
+		mpss_mem: mpss@8b000000 {
+			reg = <0x0 0x8b000000 0x0 0x7e00000>;
+			no-map;
+		};
+
+		pil_video_mem: pil-video@92e00000 {
+			reg = <0x0 0x92e00000 0x0 0x500000>;
+			no-map;
+		};
+
+		wlan_msa_mem: wlan-msa@93300000 {
+			reg = <0x0 0x93300000 0x0 0x200000>;
+			no-map;
+		};
+
+		rproc_cdsp_mem: rproc-cdsp@93500000 {
+			reg = <0x0 0x93500000 0x0 0x1e00000>;
+			no-map;
+		};
+
+		rproc_adsp_mem: rproc-adsp@95300000 {
+			reg = <0x0 0x95300000 0x0 0x1e00000>;
+			no-map;
+		};
+
+		ipa_fw_mem: ipa-fw@97100000 {
+			reg = <0x0 0x97100000 0x0 0x10000>;
+			no-map;
+		};
+
+		ipa_gsi_mem: ipa-gsi@97110000 {
+			reg = <0x0 0x97110000 0x0 0x5000>;
+			no-map;
+		};
+
+		pil_gpu_mem: pil-gpu@97115000 {
+			reg = <0x0 0x97115000 0x0 0x2000>;
+			no-map;
+		};
+
+		/*
+		 * The bootloader looks this node up by name and rewrites its
+		 * size to the framebuffer it leaves on screen.
+		 */
+		cont_splash_mem: splash_region@9c000000 {
+			reg = <0x0 0x9c000000 0x0 0xf00000>;
+			no-map;
+		};
+
+		dfps_data_mem: dfps-data@9d000000 {
+			reg = <0x0 0x9d000000 0x0 0x100000>;
+			no-map;
+		};
+
+		disp_rdump_mem: disp-rdump@9d100000 {
+			reg = <0x0 0x9d100000 0x0 0x1000000>;
+			no-map;
+		};
+
+		qseecom_mem: qseecom@9e400000 {
+			reg = <0x0 0x9e400000 0x0 0x1400000>;
+			no-map;
+		};
+
+		cdsp_sec_mem: cdsp-sec@9f800000 {
+			reg = <0x0 0x9f800000 0x0 0x1e00000>;
+			no-map;
+		};
+
+		ramoops@a1600000 {
+			compatible = "ramoops";
+			reg = <0x0 0xa1600000 0x0 0x800000>;
+			console-size = <0x400000>;
+			pmsg-size = <0x400000>;
+		};
+	};
+};
+
+&apps_rsc {
+	regulators-0 {
+		compatible = "qcom,pm6150-rpmh-regulators";
+		qcom,pmic-id = "a";
+
+		vreg_l12a_1p8: ldo12 {
+			regulator-name = "vreg_l12a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1950000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-allow-set-load;
+			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+						   RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+
+	regulators-1 {
+		compatible = "qcom,pm6150l-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		vreg_l11c_2p95: ldo11 {
+			regulator-name = "vreg_l11c_2p95";
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <3312000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-allow-set-load;
+			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+						   RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+&pm6150_resin {
+	linux,code = <KEY_VOLUMEDOWN>;
+	status = "okay";
+};
+
+&pm6150l_gpios {
+	vol_up_n: vol-up-n-state {
+		pins = "gpio2";
+		function = "normal";
+		input-enable;
+		bias-pull-up;
+		power-source = <0>;
+	};
+};
+
+&sdhc_1 {
+	pinctrl-0 = <&sdc1_state_on>;
+	pinctrl-1 = <&sdc1_state_off>;
+	pinctrl-names = "default", "sleep";
+
+	bus-width = <8>;
+	mmc-ddr-1_8v;
+	mmc-hs200-1_8v;
+	mmc-hs400-1_8v;
+	mmc-hs400-enhanced-strobe;
+	non-removable;
+	no-sd;
+	no-sdio;
+
+	vmmc-supply = <&vreg_l11c_2p95>;
+	vqmmc-supply = <&vreg_l12a_1p8>;
+
+	status = "okay";
+};
+
+/*
+ * GPIOs 0-3 belong to TrustZone: reading their configuration from Linux
+ * raises an SError.
+ */
+&tlmm {
+	gpio-reserved-ranges = <0 4>;
+};

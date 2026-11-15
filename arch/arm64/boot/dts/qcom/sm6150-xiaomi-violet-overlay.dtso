@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Xiaomi Redmi Note 7 Pro (violet) - dtbo partition entry
+ *
+ * The msm-4.14 bootloader refuses to boot unless the dtbo partition holds an
+ * overlay with the same msm-id and board-id as the DTB.  Everything violet
+ * needs is in the base DTB, so the overlay itself changes nothing.
+ *
+ * Its overlay code only resolves fragments that target a label: one that
+ * targets a path leaves the phone hanging on the boot logo.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	model = "Xiaomi Redmi Note 7 Pro";
+	compatible = "xiaomi,violet", "qcom,sm6150";
+	qcom,msm-id = <355 0>;
+	qcom,board-id = <34 0>;
+};
+
+&soc {
+};
