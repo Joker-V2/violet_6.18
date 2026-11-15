@@ -2267,6 +2267,41 @@ bool qcom_scm_is_available(void)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_is_available);
 
+/**
+ * qcom_scm_call_fnid() - Make an SCM call given in the msm-4.14 scm_call2() form
+ * @fn_id:	SMC function ID: owner in bits 29:24, service in bits 15:8 and
+ *		command in bits 7:0
+ * @arginfo:	argument count and types, as QCOM_SCM_ARGS() encodes them
+ * @args:	MAX_QCOM_SCM_ARGS arguments
+ * @ret:	the MAX_QCOM_SCM_RETS values the call returns
+ *
+ * For drivers imported from msm-4.14 that build their SMC IDs themselves,
+ * such as QSEECOM. This should *only* be called in pre-emptible context.
+ *
+ * Return: 0 on success, the remapped TrustZone error code otherwise.
+ */
+int qcom_scm_call_fnid(u32 fn_id, u32 arginfo, const u64 *args, u64 *ret)
+{
+	struct qcom_scm_desc desc = {
+		.svc = (fn_id >> 8) & 0xff,
+		.cmd = fn_id & 0xff,
+		.owner = (fn_id >> 24) & 0x3f,
+		.arginfo = arginfo,
+	};
+	struct qcom_scm_res res = {};
+	int err;
+
+	if (!qcom_scm_is_available())
+		return -EPROBE_DEFER;
+
+	memcpy(desc.args, args, sizeof(desc.args));
+	err = qcom_scm_call(__scm->dev, &desc, &res);
+	memcpy(ret, res.result, sizeof(res.result));
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_call_fnid);
+
 static int qcom_scm_fill_irq_fwspec_params(struct irq_fwspec *fwspec, u32 hwirq)
 {
 	if (hwirq >= GIC_SPI_BASE && hwirq <= GIC_MAX_SPI) {
