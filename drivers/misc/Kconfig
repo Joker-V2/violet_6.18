@@ -686,5 +686,17 @@ source "drivers/misc/pvpanic/Kconfig"
 source "drivers/misc/mchp_pci1xxxx/Kconfig"
 source "drivers/misc/keba/Kconfig"
 source "drivers/misc/amd-sbi/Kconfig"
+config QSEECOM
+	tristate "QTI Secure Execution Communicator driver"
+	depends on QCOM_SCM && DMABUF_HEAPS_MSM_LEGACY_ION
+	help
+	  Provides a communication interface between userspace and
+	  QTI Secure Execution Environment (QSEE) using Secure Channel
+	  Manager (SCM) interface. It exposes APIs for both userspace and
+	  kernel clients.
+
+	  This is the msm-4.14 driver, for TrustZone firmware and vendor
+	  userspace of that generation.
+
 source "drivers/misc/rp1/Kconfig"
 endmenu
