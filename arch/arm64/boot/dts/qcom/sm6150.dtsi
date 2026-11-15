@@ -509,7 +509,7 @@
 		};
 	};
 
-	soc: soc@0 {
+	soc: soc {
 		compatible = "simple-bus";
 		ranges = <0 0 0 0 0x10 0>;
 		dma-ranges = <0 0 0 0 0x10 0>;
@@ -548,7 +548,7 @@
 			reg = <0x0 0x00793000 0x0 0x1000>;
 		};
 
-		sdhc_1: mmc@7c4000 {
+		sdhc_1: sdhci@7c4000 {
 			compatible = "qcom,qcs615-sdhci", "qcom,sdhci-msm-v5";
 			reg = <0x0 0x007c4000 0x0 0x1000>,
 			      <0x0 0x007c5000 0x0 0x1000>,
@@ -3487,7 +3487,7 @@
 			};
 		};
 
-		sdhc_2: mmc@8804000 {
+		sdhc_2: sdhci@8804000 {
 			compatible = "qcom,qcs615-sdhci", "qcom,sdhci-msm-v5";
 			reg = <0x0 0x08804000 0x0 0x1000>;
 			reg-names = "hc";
@@ -4081,7 +4081,7 @@
 
 			status = "disabled";
 
-			usb_1_dwc3: usb@a600000 {
+			usb_1_dwc3: dwc3@a600000 {
 				compatible = "snps,dwc3";
 				reg = <0x0 0x0a600000 0x0 0xcd00>;
 
