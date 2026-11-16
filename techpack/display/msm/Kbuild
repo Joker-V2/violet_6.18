@@ -2,6 +2,26 @@
 
 KDIR := $(TOP)/kernel_platform/msm-kernel
 
+ifeq ($(KERNEL_SRC),)
+KERNEL_SRC := $(srctree)
+endif
+
+ifeq ($(CONFIG_QTI_DISPLAY_SM6150), y)
+	include $(DISPLAY_ROOT)/config/gki_sm6150disp.conf
+	LINUX_INC +=	-include $(DISPLAY_ROOT)/config/gki_sm6150dispconf.h
+endif
+
+# The headers of the downstream interfaces, which stub them out while their
+# drivers are not built
+LINUX_INC +=	-I$(DISPLAY_ROOT)/downstream_dependencies
+
+# The driver is built without the prototype warnings that are on by default
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
+
+# Its debug messages do not always match their arguments, which the clang of
+# the vendor build did not check
+ccflags-y += -Wno-error=format
+
 ifeq ($(CONFIG_ARCH_WAIPIO), y)
 ifeq ($(CONFIG_ARCH_QTI_VM), y)
 	include $(DISPLAY_ROOT)/config/gki_waipiodisptui.conf
@@ -106,7 +126,7 @@ CDEFINES += -DMULTI_IF_NAME=\"$(CHIP_NAME)\"
 endif
 
 ######### CONFIG_DRM_MSM ########
-obj-m += msm_drm.o
+obj-$(CONFIG_DRM_MSM) += msm_drm.o
 
 msm_drm-$(CONFIG_HDCP_QSEECOM) := ../hdcp/msm_hdcp.o \
 				  dp/dp_hdcp2p2.o \

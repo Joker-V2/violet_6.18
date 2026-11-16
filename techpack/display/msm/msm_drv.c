@@ -38,7 +38,9 @@
  * OF THIS SOFTWARE.
  */
 
+#include <linux/aperture.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>
 #include <drm/drm_of.h>
@@ -93,21 +95,6 @@
 
 static DEFINE_MUTEX(msm_release_lock);
 
-static void msm_fb_output_poll_changed(struct drm_device *dev)
-{
-	struct msm_drm_private *priv = NULL;
-
-	if (!dev) {
-		DRM_ERROR("output_poll_changed failed, invalid input\n");
-		return;
-	}
-
-	priv = dev->dev_private;
-
-	if (priv->fbdev)
-		drm_fb_helper_hotplug_event(priv->fbdev);
-}
-
 static void msm_drm_display_thread_priority_worker(struct kthread_work *work)
 {
 	int ret = 0;
@@ -157,7 +144,6 @@ int msm_atomic_check(struct drm_device *dev,
 
 static const struct drm_mode_config_funcs mode_config_funcs = {
 	.fb_create = msm_framebuffer_create,
-	.output_poll_changed = msm_fb_output_poll_changed,
 	.atomic_check = msm_atomic_check,
 	.atomic_commit = msm_atomic_commit,
 	.atomic_state_alloc = msm_atomic_state_alloc,
@@ -176,12 +162,6 @@ module_param(reglog, bool, 0600);
 #else
 #define reglog 0
 #endif /* CONFIG_DRM_MSM_REGISTER_LOGGING */
-
-#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
-static bool fbdev = true;
-MODULE_PARM_DESC(fbdev, "Enable fbdev compat layer");
-module_param(fbdev, bool, 0600);
-#endif /* CONFIG_DRM_FBDEV_EMULATION */
 
 static char *vram = "16m";
 MODULE_PARM_DESC(vram, "Configure VRAM size (for devices without IOMMU/GPUMMU)");
@@ -508,10 +488,6 @@ static int msm_drm_uninit(struct device *dev)
 		priv->registered = false;
 	}
 
-#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
-	if (fbdev && priv->fbdev)
-		msm_fbdev_free(ddev);
-#endif /* CONFIG_DRM_FBDEV_EMULATION */
 	drm_atomic_helper_shutdown(ddev);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 	msm_irq_uninstall(ddev);
@@ -623,14 +599,6 @@ static int msm_init_vram(struct drm_device *dev)
 		 * Grab the entire CMA chunk carved out in early startup in
 		 * mach-msm:
 		 */
-	} else if (!iommu_present(&platform_bus_type)) {
-		u32 vram_size;
-
-		ret = of_property_read_u32(dev->dev->of_node,
-					"qcom,vram-size", &vram_size);
-		size = (ret < 0) ? memparse(vram, NULL) : vram_size;
-		DRM_INFO("using 0x%lx VRAM carveout\n", size);
-		ret = 0;
 	}
 
 	if (size) {
@@ -836,6 +804,15 @@ static int msm_drm_device_init(struct platform_device *pdev,
 	struct msm_drm_private *priv;
 	int i, ret;
 
+	/*
+	 * The bootloader splash is scanned out of the cont_splash_mem
+	 * region, which sde hands over to the page allocator after the first
+	 * commit, so no firmware framebuffer driver may keep using it.
+	 */
+	ret = aperture_remove_all_conflicting_devices(drv->name);
+	if (ret)
+		return ret;
+
 	ddev = drm_dev_alloc(drv, dev);
 	if (IS_ERR(ddev)) {
 		DISP_DEV_ERR(dev, "failed to allocate drm_device\n");
@@ -913,6 +890,7 @@ static int msm_drm_component_init(struct device *dev)
 	INIT_LIST_HEAD(&priv->vm_client_list);
 	INIT_LIST_HEAD(&priv->fence_error_client_list);
 	mutex_init(&priv->mm_lock);
+	mutex_init(&priv->struct_mutex);
 
 	mutex_init(&priv->vm_client_lock);
 	mutex_init(&priv->fence_error_client_lock);
@@ -991,11 +969,6 @@ static int msm_drm_component_init(struct device *dev)
 			goto fail;
 		}
 	}
-
-#if IS_ENABLED(CONFIG_DRM_FBDEV_EMULATION)
-	if (fbdev)
-		priv->fbdev = msm_fbdev_init(ddev);
-#endif /* CONFIG_DRM_FBDEV_EMULATION */
 
 	/* create drm client only when fbdev is not supported */
 	if (!priv->fbdev) {
@@ -1108,6 +1081,8 @@ static void msm_preclose(struct drm_device *dev, struct drm_file *file)
 		kms->funcs->preclose(kms, file);
 }
 
+static void msm_lastclose(struct drm_device *dev);
+
 static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct msm_drm_private *priv = dev->dev_private;
@@ -1120,10 +1095,10 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 	if (kms->funcs && kms->funcs->postclose)
 		kms->funcs->postclose(kms, file);
 
-	mutex_lock(&dev->struct_mutex);
+	mutex_lock(&priv->struct_mutex);
 	if (ctx == priv->lastctx)
 		priv->lastctx = NULL;
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&priv->struct_mutex);
 
 	mutex_lock(&ctx->power_lock);
 	if (ctx->enable_refcnt) {
@@ -1133,6 +1108,13 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 	mutex_unlock(&ctx->power_lock);
 
 	context_close(ctx);
+
+	/*
+	 * drm_driver lost its lastclose hook, the core drops the last
+	 * open count right after postclose returns.
+	 */
+	if (atomic_read(&dev->open_count) == 1)
+		msm_lastclose(dev);
 }
 
 static void msm_lastclose(struct drm_device *dev)
@@ -1170,7 +1152,7 @@ static void msm_lastclose(struct drm_device *dev)
 		struct drm_vblank_crtc *vblank = &dev->vblank[i];
 		struct timer_list *disable_timer = &vblank->disable_timer;
 
-		if (del_timer_sync(disable_timer))
+		if (timer_delete_sync(disable_timer))
 			disable_timer->function(disable_timer);
 	}
 
@@ -1275,6 +1257,7 @@ static int msm_ioctl_gem_cpu_fini(struct drm_device *dev, void *data,
 static int msm_ioctl_gem_madvise(struct drm_device *dev, void *data,
 		struct drm_file *file)
 {
+	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_msm_gem_madvise *args = data;
 	struct drm_gem_object *obj;
 	int ret;
@@ -1287,7 +1270,7 @@ static int msm_ioctl_gem_madvise(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	ret = mutex_lock_interruptible(&dev->struct_mutex);
+	ret = mutex_lock_interruptible(&priv->struct_mutex);
 	if (ret)
 		return ret;
 
@@ -1306,7 +1289,7 @@ static int msm_ioctl_gem_madvise(struct drm_device *dev, void *data,
 	drm_gem_object_put(obj);
 
 unlock:
-	mutex_unlock(&dev->struct_mutex);
+	mutex_unlock(&priv->struct_mutex);
 	return ret;
 }
 
@@ -1789,16 +1772,13 @@ static const struct drm_ioctl_desc msm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_PREP, msm_ioctl_gem_cpu_prep, DRM_AUTH|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_FINI, msm_ioctl_gem_cpu_fini, DRM_AUTH|DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_GEM_MADVISE,  msm_ioctl_gem_madvise,  DRM_AUTH|DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(SDE_WB_CONFIG, sde_wb_config, DRM_UNLOCKED|DRM_AUTH),
-	DRM_IOCTL_DEF_DRV(MSM_REGISTER_EVENT,  msm_ioctl_register_event,
-			  DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(MSM_DEREGISTER_EVENT,  msm_ioctl_deregister_event,
-			  DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(MSM_RMFB2, msm_ioctl_rmfb2, DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(SDE_WB_CONFIG, sde_wb_config, DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(MSM_REGISTER_EVENT,  msm_ioctl_register_event, 0),
+	DRM_IOCTL_DEF_DRV(MSM_DEREGISTER_EVENT,  msm_ioctl_deregister_event, 0),
+	DRM_IOCTL_DEF_DRV(MSM_RMFB2, msm_ioctl_rmfb2, 0),
 	DRM_IOCTL_DEF_DRV(MSM_POWER_CTRL, msm_ioctl_power_ctrl,
 			DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_DISPLAY_HINT, msm_ioctl_display_hint_ops,
-			DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(MSM_DISPLAY_HINT, msm_ioctl_display_hint_ops, 0),
 };
 
 static const struct file_operations fops = {
@@ -1809,8 +1789,9 @@ static const struct file_operations fops = {
 	.compat_ioctl       = drm_compat_ioctl,
 	.poll               = drm_poll,
 	.read               = drm_read,
-	.llseek             = no_llseek,
+	.llseek             = noop_llseek,
 	.mmap               = msm_gem_mmap,
+	.fop_flags          = FOP_UNSIGNED_OFFSET,
 };
 
 static struct drm_driver msm_driver = {
@@ -1820,7 +1801,6 @@ static struct drm_driver msm_driver = {
 				DRIVER_MODESET,
 	.open               = msm_open,
 	.postclose          = msm_postclose,
-	.lastclose          = msm_lastclose,
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	.irq_handler        = msm_irq,
 	.irq_preinstall     = msm_irq_preinstall,
@@ -1837,17 +1817,13 @@ static struct drm_driver msm_driver = {
 #endif
 	.dumb_create        = msm_gem_dumb_create,
 	.dumb_map_offset    = msm_gem_dumb_map_offset,
-	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
 	.gem_prime_import   = msm_gem_prime_import,
 	.gem_prime_import_sg_table = msm_gem_prime_import_sg_table,
-	.gem_prime_mmap     = msm_gem_prime_mmap,
 	.ioctls             = msm_ioctls,
 	.num_ioctls         = ARRAY_SIZE(msm_ioctls),
 	.fops               = &fops,
 	.name               = "msm_drm",
 	.desc               = "MSM Snapdragon DRM",
-	.date               = "20130625",
 	.major              = MSM_VERSION_MAJOR,
 	.minor              = MSM_VERSION_MINOR,
 	.patchlevel         = MSM_VERSION_PATCHLEVEL,
@@ -2076,7 +2052,7 @@ static int add_components_mdp(struct device *mdp_dev,
 	return 0;
 }
 
-static int compare_name_mdp(struct device *dev, void *data)
+static int compare_name_mdp(struct device *dev, const void *data)
 {
 	return (strnstr(dev_name(dev), "mdp", strlen("mdp")) != NULL);
 }
@@ -2207,9 +2183,6 @@ msm_gem_smmu_address_space_get(struct drm_device *dev,
 	struct msm_kms *kms;
 	const struct msm_kms_funcs *funcs;
 	struct msm_gem_address_space *aspace;
-
-	if (!iommu_present(&platform_bus_type))
-		return ERR_PTR(-ENODEV);
 
 	if ((!dev) || (!dev->dev_private))
 		return ERR_PTR(-EINVAL);
@@ -2354,12 +2327,10 @@ static int msm_pdev_probe(struct platform_device *pdev)
 	return component_master_add_with_match(&pdev->dev, &msm_drm_ops, match);
 }
 
-static int msm_pdev_remove(struct platform_device *pdev)
+static void msm_pdev_remove(struct platform_device *pdev)
 {
 	component_master_del(&pdev->dev, &msm_drm_ops);
 	of_platform_depopulate(&pdev->dev);
-
-	return 0;
 }
 
 static void msm_pdev_shutdown(struct platform_device *pdev)

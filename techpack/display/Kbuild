@@ -3,6 +3,11 @@
 ifeq ($(DISPLAY_ROOT),)
 DISPLAY_ROOT=$(srctree)/techpack/display
 endif
+export DISPLAY_ROOT
+
+ifeq ($(CONFIG_QTI_DISPLAY_SM6150), y)
+	include $(DISPLAY_ROOT)/config/gki_sm6150disp.conf
+endif
 
 LINUXINCLUDE    += \
 		   -I$(DISPLAY_ROOT)/include/uapi/display \

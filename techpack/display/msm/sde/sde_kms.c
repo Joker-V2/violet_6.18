@@ -771,11 +771,15 @@ static int _sde_kms_release_shared_buffer(unsigned long mem_addr,
 		splash_buffer_size -= ramdump_buffer_size;
 	}
 
+	/* A no-map region never was in the linear map: leave it reserved */
+	if (!memblock_is_map_memory(mem_addr))
+		return 0;
+
 	pfn_start = mem_addr >> PAGE_SHIFT;
 	pfn_end = (mem_addr + splash_buffer_size) >> PAGE_SHIFT;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 19, 0))
-	memblock_free((unsigned int*)mem_addr, splash_buffer_size);
+	memblock_phys_free(mem_addr, splash_buffer_size);
 #else
 	ret = memblock_free(mem_addr, splash_buffer_size);
 	if (ret) {

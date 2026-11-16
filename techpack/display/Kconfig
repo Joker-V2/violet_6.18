@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config QTI_DISPLAY_SM6150
+	bool "Qualcomm SDE display driver for SM6150"
+	depends on DRM=y && ARCH_QCOM && OF && MMU
+	depends on !DRM_MSM
+	select DRM_KMS_HELPER
+	select DRM_DISPLAY_HELPER
+	select DRM_MIPI_DSI
+	select DRM_PANEL
+	select BACKLIGHT_CLASS_DEVICE
+	select SYNC_FILE
+	select QCOM_UBWC_CONFIG
+	help
+	  The SDE display driver of Qualcomm's display-drivers, built into
+	  the kernel for SM6150 with its target config: the SDE and DSI,
+	  without DisplayPort, writeback and the RSC. It provides the msm_drm
+	  interface the vendor display HALs use.
+
+	  It takes the place of the drm/msm driver, which cannot be built
+	  along with it.

@@ -29,6 +29,7 @@
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/list.h>
 #include <linux/iommu.h>
 #include <linux/types.h>
@@ -1083,6 +1084,9 @@ struct msm_drm_private {
 	struct list_head inactive_list;
 	struct mutex mm_lock;
 
+	/* the drm core dropped its struct_mutex */
+	struct mutex struct_mutex;
+
 	struct workqueue_struct *wq;
 
 	/* crtcs pending async atomic updates: */
@@ -1364,14 +1368,13 @@ struct drm_framebuffer *msm_framebuffer_init(struct drm_device *dev,
 		const struct drm_mode_fb_cmd2 *mode_cmd,
 		struct drm_gem_object **bos);
 struct drm_framebuffer *msm_framebuffer_create(struct drm_device *dev,
-		struct drm_file *file, const struct drm_mode_fb_cmd2 *mode_cmd);
+		struct drm_file *file, const struct drm_format_info *info,
+		const struct drm_mode_fb_cmd2 *mode_cmd);
 int msm_framebuffer_set_cache_hint(struct drm_framebuffer *fb,
 		u32 flags, u32 rd_type, u32 wr_type);
 int msm_framebuffer_get_cache_hint(struct drm_framebuffer *fb,
 		u32 *flags, u32 *rd_type, u32 *wr_type);
 
-struct drm_fb_helper *msm_fbdev_init(struct drm_device *dev);
-void msm_fbdev_free(struct drm_device *dev);
 
 struct hdmi;
 #if IS_ENABLED(CONFIG_DRM_MSM_HDMI)

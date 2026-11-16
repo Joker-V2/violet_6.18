@@ -10,6 +10,7 @@
 #include <linux/err.h>
 #include <linux/version.h>
 #include <linux/ktime.h>
+#include <video/mipi_display.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -574,9 +575,8 @@ free_aspace_cb:
 	msm_gem_address_space_unregister_cb(display->aspace,
 			dsi_display_aspace_cb_locked, display);
 free_gem:
-	mutex_lock(&display->drm_dev->struct_mutex);
-	msm_gem_free_object(display->tx_cmd_buf);
-	mutex_unlock(&display->drm_dev->struct_mutex);
+	/* the last reference frees the bo */
+	drm_gem_object_put(display->tx_cmd_buf);
 error:
 	return rc;
 }
@@ -1980,7 +1980,7 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 	char secondary_panel_str[] = "_secondary";
 	int i;
 
-	strlcpy(panel_name, display->name, SEC_PANEL_NAME_MAX_LEN);
+	strscpy(panel_name, display->name, SEC_PANEL_NAME_MAX_LEN);
 	if (strcmp(display->display_type, "secondary") == 0)
 		strlcat(panel_name, secondary_panel_str, SEC_PANEL_NAME_MAX_LEN);
 
@@ -2642,7 +2642,7 @@ static int dsi_display_parse_boot_display_selection(void)
 	int i, j;
 
 	for (i = 0; i < MAX_DSI_ACTIVE_DISPLAY; i++) {
-		strlcpy(disp_buf, boot_displays[i].boot_param,
+		strscpy(disp_buf, boot_displays[i].boot_param,
 			MAX_CMDLINE_PARAM_LEN);
 
 		pos = strnstr(disp_buf, ":", strlen(disp_buf));
@@ -6168,21 +6168,21 @@ end:
 	return rc;
 }
 
-int dsi_display_dev_remove(struct platform_device *pdev)
+void dsi_display_dev_remove(struct platform_device *pdev)
 {
-	int rc = 0, i = 0;
+	int i = 0;
 	struct dsi_display *display;
 	struct dsi_display_ctrl *ctrl;
 
 	if (!pdev) {
 		DSI_ERR("Invalid device\n");
-		return -EINVAL;
+		return;
 	}
 
 	display = platform_get_drvdata(pdev);
 	if (!display || !display->panel_node) {
 		DSI_ERR("invalid display\n");
-		return -EINVAL;
+		return;
 	}
 
 	/* decrement ref count */
@@ -6204,7 +6204,6 @@ int dsi_display_dev_remove(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, display);
-	return rc;
 }
 
 int dsi_display_get_num_of_displays(void)
@@ -8991,7 +8990,7 @@ static void dsi_display_handle_poms_te(struct work_struct *work)
 	}
 
 	dsi = &panel->mipi_device;
-	rc = mipi_dsi_dcs_set_tear_off(dsi);
+	rc = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_TEAR_OFF, NULL, 0);
 
 error:
 	mutex_unlock(&panel->panel_lock);

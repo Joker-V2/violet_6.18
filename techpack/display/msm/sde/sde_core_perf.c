@@ -310,46 +310,13 @@ static inline enum sde_crtc_client_type _get_sde_client_type(
 		return RT_CLIENT;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0))
-void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
-{
-	struct llcc_staling_mode_params params = {0};
-
-	if (!sde_cfg || !slice || !test_bit(SDE_FEATURE_SYS_CACHE_STALING, sde_cfg->features))
-		return;
-
-	llcc_configure_staling_mode(slice, &params);
-}
-
-void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
-{
-	struct sde_kms *kms;
-
-	if (!crtc) {
-		SDE_ERROR("invalid crtc\n");
-		return;
-	}
-
-	kms = _sde_crtc_get_kms(crtc);
-	if (!kms || !kms->catalog) {
-		SDE_ERROR("invalid kms\n");
-		return;
-	}
-
-	if (!test_bit(SDE_FEATURE_SYS_CACHE_STALING, kms->catalog->features) ||
-			!kms->perf.llcc_active[type])
-		return;
-
-	llcc_notif_staling_inc_counter(kms->catalog->sc_cfg[type].slice);
-}
-#else
+/* The system cache staling mode is an extension of the msm-kernel LLCC */
 void sde_core_perf_llcc_stale_configure(struct sde_mdss_cfg *sde_cfg, struct llcc_slice_desc *slice)
 {
 }
 void sde_core_perf_llcc_stale_frame(struct drm_crtc *crtc, enum sde_sys_cache_type type)
 {
 }
-#endif
 
 /**
  * @_sde_core_perf_activate_llcc() - Activates/deactivates the system llcc
