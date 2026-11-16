@@ -11,6 +11,9 @@
 #include "sm6150.dtsi"
 #include "pm6150.dtsi"
 #include "pm6150l.dtsi"
+#include "sm6150-sde.dtsi"
+#include "dsi-panel-ft8719-tianma-fhd-video.dtsi"
+#include "dsi-panel-nt36672a-shenchao-fhd-video.dtsi"
 
 /*
  * The GPU, video, CDSP and ADSP firmware regions sit lower on violet than on
@@ -250,10 +253,30 @@
 		compatible = "qcom,pm6150-rpmh-regulators";
 		qcom,pmic-id = "a";
 
+		vreg_l4a_0p9: ldo4 {
+			regulator-name = "vreg_l4a_0p9";
+			regulator-min-microvolt = <875000>;
+			regulator-max-microvolt = <975000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-allow-set-load;
+			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+						   RPMH_REGULATOR_MODE_HPM>;
+		};
+
 		vreg_l12a_1p8: ldo12 {
 			regulator-name = "vreg_l12a_1p8";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1950000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-allow-set-load;
+			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+						   RPMH_REGULATOR_MODE_HPM>;
+		};
+
+		vreg_l13a_1p8: ldo13 {
+			regulator-name = "vreg_l13a_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1900000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
@@ -264,6 +287,16 @@
 	regulators-1 {
 		compatible = "qcom,pm6150l-rpmh-regulators";
 		qcom,pmic-id = "c";
+
+		vreg_l3c_1p2: ldo3 {
+			regulator-name = "vreg_l3c_1p2";
+			regulator-min-microvolt = <1232000>;
+			regulator-max-microvolt = <1260000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-allow-set-load;
+			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
+						   RPMH_REGULATOR_MODE_HPM>;
+		};
 
 		vreg_l11c_2p95: ldo11 {
 			regulator-name = "vreg_l11c_2p95";
@@ -277,6 +310,82 @@
 	};
 };
 
+/*
+ * The bootloader names the panel it found in msm_drm.dsi_display0=, and
+ * the driver looks it up by node name, so the panel nodes keep the names
+ * the bootloader knows.
+ */
+&dsi_ft8719_tianma_video {
+	qcom,dsi-ctrl-num = <0>;
+	qcom,dsi-phy-num = <0>;
+	qcom,dsi-select-clocks = "pll_byte_clk0", "pll_dsi_clk0";
+
+	qcom,mdss-dsi-t-clk-post = <0x0f>;
+	qcom,mdss-dsi-t-clk-pre = <0x37>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,platform-te-gpio = <&tlmm 90 0>;
+	qcom,platform-reset-gpio = <&tlmm 91 0>;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 20 0a 0b 06 02 04 a0];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_nt36672a_shenchao_video {
+	qcom,dsi-ctrl-num = <0>;
+	qcom,dsi-phy-num = <0>;
+	qcom,dsi-select-clocks = "pll_byte_clk0", "pll_dsi_clk0";
+
+	qcom,mdss-dsi-t-clk-post = <0x0f>;
+	qcom,mdss-dsi-t-clk-pre = <0x37>;
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,platform-te-gpio = <&tlmm 90 0>;
+	qcom,platform-reset-gpio = <&tlmm 91 0>;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 21 09 0b 06 02 04 a0
+				26 20 0a 0b 06 02 04 a0];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+/*
+ * The panel power entries keep the lab and ibb names, but nothing drives
+ * the PM6150L LCDB yet: those two fall back to dummy supplies, and the
+ * LCDB stays on as the bootloader left it.
+ */
+&dsi_panel_pwr_supply {
+	qcom,panel-supply-entry@0 {
+		qcom,supply-post-on-sleep = <1>;
+		qcom,supply-pre-off-sleep = <15>;
+	};
+
+	qcom,panel-supply-entry@1 {
+		qcom,supply-post-on-sleep = <3>;
+	};
+
+	qcom,panel-supply-entry@2 {
+		/delete-property/ qcom,supply-post-on-sleep;
+		qcom,supply-pre-off-sleep = <4>;
+	};
+};
+
 &gpu {
 	status = "okay";
 };
@@ -284,6 +393,20 @@
 &gpu_zap_shader {
 	/* The vendor partition has the zap shader split into segments */
 	firmware-name = "a612_zap.mdt";
+};
+
+&mdss_dsi0 {
+	vdda-1p2-supply = <&vreg_l3c_1p2>;
+	status = "okay";
+};
+
+&mdss_dsi_phy0 {
+	vdda-0p9-supply = <&vreg_l4a_0p9>;
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
 };
 
 &pm6150_resin {
@@ -299,6 +422,24 @@
 		bias-pull-up;
 		power-source = <0>;
 	};
+};
+
+&pm6150l_wled {
+	qcom,current-limit-microamp = <25000>;
+	qcom,cabc;
+	qcom,cabc-sel = <1>;
+	qcom,auto-string-detection;
+
+	status = "okay";
+};
+
+&sde_dsi {
+	vddio-supply = <&vreg_l13a_1p8>;
+
+	/* Used when the bootloader does not name the panel */
+	qcom,dsi-default-panel = <&dsi_nt36672a_shenchao_video>;
+
+	status = "okay";
 };
 
 &sdhc_1 {
@@ -325,6 +466,10 @@
  * GPIOs 0-3 belong to TrustZone: reading their configuration from Linux
  * raises an SError.
  */
+&smmu_sde_unsec {
+	status = "okay";
+};
+
 &tlmm {
 	gpio-reserved-ranges = <0 4>;
 };
