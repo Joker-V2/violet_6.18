@@ -13,9 +13,10 @@
 #include "pm6150l.dtsi"
 
 /*
- * The video, CDSP and ADSP firmware regions sit lower on violet than on
+ * The GPU, video, CDSP and ADSP firmware regions sit lower on violet than on
  * QCS615; they are re-added below at the addresses violet's firmware uses.
  */
+/delete-node/ &pil_gpu_mem;
 /delete-node/ &pil_video_mem;
 /delete-node/ &rproc_cdsp_mem;
 /delete-node/ &rproc_adsp_mem;
@@ -274,6 +275,15 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 	};
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	/* The vendor partition has the zap shader split into segments */
+	firmware-name = "a612_zap.mdt";
 };
 
 &pm6150_resin {
