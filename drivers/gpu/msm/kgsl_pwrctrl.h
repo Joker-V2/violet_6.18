@@ -373,6 +373,6 @@ u32 kgsl_pwrctrl_get_acv_perfmode_lvl(struct kgsl_device *device, u32 ddr_freq);
  */
 int kgsl_pwrctrl_setup_default_votes(struct kgsl_device *device);
 
-static int kgsl_regulator_disable_wait(struct regulator *reg, u32 timeout);
+int kgsl_regulator_disable_wait(struct regulator *reg, u32 timeout);
 
 #endif /* __KGSL_PWRCTRL_H */

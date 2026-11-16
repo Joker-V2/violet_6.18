@@ -1,89 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
-KDIR := $(TOP)/kernel_platform/common
+KGSL_PATH := $(src)
 
-ifeq ($(KGSL_PATH),)
-KGSL_PATH=$(src)
-endif
+# Built into an upstream kernel: the downstream interfaces are stubbed out
+ccflags-y += -I$(KGSL_PATH)/downstream_dependencies
 
-# If we're not GVM and not in an Android tree, select KGSL config
-ifeq ($(CONFIG_QTI_QUIN_GVM),)
-	ifeq ($(ANDROID_BUILD_TOP),)
-		CONFIG_QCOM_KGSL = m
-	endif
-endif
+# The driver is built without the prototype warnings that are on by default
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
 
-include $(KGSL_PATH)/config/gki_k2c.conf
-
-ifeq ($(CONFIG_ARCH_WAIPIO), y)
-	include $(KGSL_PATH)/config/gki_waipiodisp.conf
-endif
-ifeq ($(CONFIG_ARCH_KALAMA), y)
-	include $(KGSL_PATH)/config/gki_kalama.conf
-endif
-ifeq ($(CONFIG_ARCH_PINEAPPLE), y)
-	include $(KGSL_PATH)/config/gki_pineapple.conf
-endif
-ifeq ($(CONFIG_ARCH_BLAIR), y)
-	include $(KGSL_PATH)/config/gki_blair.conf
-endif
-ifeq ($(CONFIG_ARCH_PITTI), y)
-	include $(KGSL_PATH)/config/gki_pitti.conf
-endif
-ifeq ($(CONFIG_ARCH_SA8155), y)
-	include $(KGSL_PATH)/config/gki_sa8155.conf
-endif
-ifeq ($(CONFIG_ARCH_KHAJE), y)
-	include $(KGSL_PATH)/config/gki_khajedisp.conf
-endif
-ifeq ($(CONFIG_ARCH_SA8195), y)
-	include $(KGSL_PATH)/config/gki_sa8155.conf
-endif
-ifeq ($(CONFIG_ARCH_SA6155), y)
-	include $(KGSL_PATH)/config/gki_sa8155.conf
-endif
-ifeq ($(CONFIG_ARCH_MONACO), y)
-	include $(KGSL_PATH)/config/gki_monaco.conf
-endif
-ifeq ($(CONFIG_ARCH_LEMANS), y)
-	include $(KGSL_PATH)/config/gki_lemans.conf
-endif
-ifeq ($(CONFIG_ARCH_KONA), y)
-        include $(KGSL_PATH)/config/gki_kona.conf
-endif
-ifeq ($(CONFIG_ARCH_TRINKET), y)
-	include $(KGSL_PATH)/config/gki_trinket.conf
-endif
-ifeq ($(CONFIG_ARCH_QCS405), y)
-	include $(KGSL_PATH)/config/gki_qcs405.conf
-endif
-ifeq ($(CONFIG_ARCH_HOLI), y)
-	include $(KGSL_PATH)/config/gki_blair.conf
-endif
-ifeq ($(CONFIG_ARCH_SDM670), y)
-	include $(KGSL_PATH)/config/gki_qcs605.conf
-endif
-ifeq ($(CONFIG_ARCH_NIOBE), y)
-	include $(KGSL_PATH)/config/gki_niobe.conf
-endif
-ifeq ($(CONFIG_ARCH_BENGAL), y)
-        include $(KGSL_PATH)/config/gki_bengal.conf
-endif
-ifeq ($(CONFIG_ARCH_PARROT), y)
-	include $(KGSL_PATH)/config/gki_parrot.conf
-endif
-ifeq ($(CONFIG_ARCH_SCUBA), y)
-	include $(KGSL_PATH)/config/gki_scuba.conf
-endif
-ifeq ($(CONFIG_ARCH_NEO), y)
-	include $(KGSL_PATH)/config/gki_neo.conf
-endif
-ifeq ($(CONFIG_ARCH_SM6150), y)
-	include $(KGSL_PATH)/config/gki_sm6150.conf
-	subdir-ccflags-y += $(LE_EXTRA_CFLAGS)
-endif
-
-ccflags-y += -I$(KGSL_PATH) -I$(KGSL_PATH)/include/linux -I$(KGSL_PATH)/include -I$(KERNEL_SRC)/drivers/devfreq
+ccflags-y += -I$(KGSL_PATH) -I$(KGSL_PATH)/include/linux -I$(KGSL_PATH)/include -I$(srctree)/drivers/devfreq
 
 obj-$(CONFIG_QCOM_KGSL) += msm_kgsl.o
 
@@ -116,18 +41,18 @@ ifndef CONFIG_QCOM_KGSL_USE_SHMEM
 	msm_kgsl-y += kgsl_pool.o
 endif
 
-ifeq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),\"simple_ondemand\")
+ifeq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),simple_ondemand)
 ccflags-y += -DQCOM_KGSL_SKIP_MSM_GOVERNORS
 endif
 
 ifndef CONFIG_DEVFREQ_GOV_QCOM_ADRENO_TZ
-ifneq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),\"simple_ondemand\")
+ifneq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),simple_ondemand)
 	msm_kgsl-y += governor_msm_adreno_tz.o
 endif
 endif
 
 ifndef CONFIG_DEVFREQ_GOV_QCOM_GPUBW_MON
-ifneq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),\"simple_ondemand\")
+ifneq ($(CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR),simple_ondemand)
 	msm_kgsl-y += governor_gpubw_mon.o
 endif
 endif

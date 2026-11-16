@@ -723,10 +723,8 @@ static int a6xx_rgmu_clock_set(struct adreno_device *adreno_dev,
 		u32 pwrlevel)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	struct kgsl_pwrlevel *level = &pwr->pwrlevels[pwrlevel];
-	int ret;
 
 	if (pwrlevel == INVALID_DCVS_IDX)
 		return -EINVAL;

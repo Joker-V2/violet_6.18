@@ -9,6 +9,7 @@
 #include <linux/firmware.h>
 #include <linux/input.h>
 #include <linux/interconnect.h>
+#include <linux/iommu.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
@@ -1479,7 +1480,8 @@ static int adreno_of_get_power(struct adreno_device *adreno_dev,
 }
 
 /* Read the fuse through the new and fancy nvmem method */
-static int adreno_read_fuse(struct platform_device *pdev, const char *fuse)
+static int __maybe_unused adreno_read_fuse(struct platform_device *pdev,
+		const char *fuse)
 {
 	struct nvmem_cell *cell = nvmem_cell_get(&pdev->dev, fuse);
 	int ret = PTR_ERR_OR_ZERO(cell);
@@ -1506,7 +1508,7 @@ static int adreno_read_fuse(struct platform_device *pdev, const char *fuse)
 	return val;
 }
 
-static void adreno_read_soc_code(struct kgsl_device *device)
+static void __maybe_unused adreno_read_soc_code(struct kgsl_device *device)
 {
 	int feature_code, pcode;
 	bool internal_sku;
@@ -2042,16 +2044,22 @@ static void adreno_init_mal(struct adreno_device *adreno_dev)
 #if (KERNEL_VERSION(6, 17, 0) <= LINUX_VERSION_CODE)
 static int adreno_init_ubwc(struct adreno_device *adreno_dev)
 {
-	struct qcom_ubwc_cfg_data *cfg = qcom_ubwc_config_get_data();
+	const struct qcom_ubwc_cfg_data *cfg = qcom_ubwc_config_get_data();
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	/* Extract the UBWC major version from ubwc_enc_version[31:28].
 	 * If cfg is NULL, default to KGSL_UBWC_NONE.
 	 */
-	u32 ubwc_mode = cfg ? cfg->ubwc_enc_version >> 28 : KGSL_UBWC_NONE;
+	u32 ubwc_mode;
 	int ret = 0;
 
+	/* The UBWC config returns an error for an unknown SoC */
+	if (IS_ERR(cfg))
+		cfg = NULL;
+
+	ubwc_mode = cfg ? cfg->ubwc_enc_version >> 28 : KGSL_UBWC_NONE;
+
 	if (ubwc_mode != KGSL_UBWC_NONE) {
-		adreno_dev->ubwc_cfg_data = cfg;
+		adreno_dev->ubwc_cfg_data = (void *)cfg;
 		adreno_dev->ubwc_mode = ubwc_mode;
 		adreno_dev->highest_bank_bit = cfg->highest_bank_bit;
 	} else {
@@ -2158,7 +2166,13 @@ int adreno_device_probe(struct platform_device *pdev,
 	if (ADRENO_GPUREV(adreno_dev) >= 600)
 		kgsl_mmu_set_feature(device, KGSL_MMU_SMMU_APERTURE);
 
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_IOCOHERENT))
+	/*
+	 * The GPU can only snoop the CPU caches through an SMMU that walks
+	 * coherently: on upstream kernels the SMMU says so.
+	 */
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_IOCOHERENT) &&
+	    (!IS_ENABLED(CONFIG_QCOM_KGSL_UPSTREAM) ||
+	     device_iommu_capable(&device->pdev->dev, IOMMU_CAP_CACHE_COHERENCY)))
 		kgsl_mmu_set_feature(device, KGSL_MMU_IO_COHERENT);
 
 	/*

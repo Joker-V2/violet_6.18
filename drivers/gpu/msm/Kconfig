@@ -4,6 +4,7 @@ config QCOM_KGSL
 	depends on ARCH_QCOM
 	depends on NVMEM_QCOM_QFPROM || QCOM_QFPROM
 	select QCOM_MDT_LOADER
+	select QCOM_UBWC_CONFIG
 	select INTERVAL_TREE
 	select TRACE_GPU_MEM
 	help
@@ -22,11 +23,12 @@ config QCOM_KGSL_FENCE_TRACE
 
 config QCOM_ADRENO_DEFAULT_GOVERNOR
 	string "devfreq governor for the adreno core"
+	default "simple_ondemand" if QCOM_KGSL_UPSTREAM
 	default "msm-adreno-tz"
 
 config QCOM_KGSL_CORESIGHT
 	bool "Enable coresight support for the Adreno GPU"
-	depends on CORESIGHT
+	depends on CORESIGHT=y || (CORESIGHT && QCOM_KGSL=m)
 	default y
 	help
 	  When enabled, the Adreno GPU is available as a source for Coresight
@@ -35,7 +37,7 @@ config QCOM_KGSL_CORESIGHT
 
 config QCOM_KGSL_IOCOHERENCY_DEFAULT
 	bool "Enable I/O coherency on cached GPU memory by default"
-	default y if ARCH_LAHAINA
+	default y if ARCH_LAHAINA || QCOM_KGSL_UPSTREAM
 	help
 	 Say 'Y' here to enable I/O cache coherency by default on targets that
 	 support hardware I/O coherency. If enabled all cached GPU memory
@@ -129,6 +131,7 @@ config QCOM_KGSL_DEVCOREDUMP
 
 config QCOM_KGSL_UPSTREAM
 	bool "Enable KGSL compilation with upstream kernel"
+	default y
 	help
 	  Say 'Y' to enable kgsl compilation with upstream kernel. If enabled,
 	  all downstream dependencies are stubbed out.

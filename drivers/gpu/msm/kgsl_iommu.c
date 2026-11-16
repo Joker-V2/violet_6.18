@@ -2602,9 +2602,7 @@ err_domain_free:
 err_device_put:
 	platform_device_put(pdev);
 	context->pdev = NULL;
-err_node_put:
 	of_node_put(node);
-err:
 	return ret;
 }
 
@@ -2914,7 +2912,6 @@ err_device_put:
 	context->pdev = NULL;
 err_node_put:
 	of_node_put(node);
-err:
 	return ret;
 }
 
