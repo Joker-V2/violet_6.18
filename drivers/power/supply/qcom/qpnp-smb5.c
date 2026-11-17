@@ -306,7 +306,7 @@ static int smb5_chg_config_init(struct smb5 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	struct device_node *node = chg->dev->of_node;
-	int subtype = (u8)of_device_get_match_data(chg->dev);
+	int subtype = (u8)(uintptr_t)of_device_get_match_data(chg->dev);
 
 	switch (subtype) {
 	case PM8150B:
@@ -960,7 +960,7 @@ static int smb5_init_usb_psy(struct smb5 *chip)
 	struct smb_charger *chg = &chip->chg;
 
 	usb_cfg.drv_data = chip;
-	usb_cfg.of_node = chg->dev->of_node;
+	usb_cfg.fwnode = of_fwnode_handle(chg->dev->of_node);
 	chg->usb_psy = devm_power_supply_register(chg->dev,
 						  &usb_psy_desc,
 						  &usb_cfg);
@@ -1060,7 +1060,7 @@ static int smb5_init_usb_port_psy(struct smb5 *chip)
 	struct smb_charger *chg = &chip->chg;
 
 	usb_port_cfg.drv_data = chip;
-	usb_port_cfg.of_node = chg->dev->of_node;
+	usb_port_cfg.fwnode = of_fwnode_handle(chg->dev->of_node);
 	chg->usb_port_psy = devm_power_supply_register(chg->dev,
 						  &usb_port_psy_desc,
 						  &usb_port_cfg);
@@ -1135,6 +1135,7 @@ static int smb5_dc_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		rc = vote(chg->dc_suspend_votable, WBC_VOTER,
 			(bool)val->intval, 0);
+		fallthrough;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblib_set_prop_dc_current_max(chg, val);
 		break;
@@ -1175,7 +1176,7 @@ static int smb5_init_dc_psy(struct smb5 *chip)
 	struct smb_charger *chg = &chip->chg;
 
 	dc_cfg.drv_data = chip;
-	dc_cfg.of_node = chg->dev->of_node;
+	dc_cfg.fwnode = of_fwnode_handle(chg->dev->of_node);
 	chg->dc_psy = devm_power_supply_register(chg->dev,
 						  &dc_psy_desc,
 						  &dc_cfg);
@@ -1382,7 +1383,7 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 	int rc = 0;
 
 	batt_cfg.drv_data = chg;
-	batt_cfg.of_node = chg->dev->of_node;
+	batt_cfg.fwnode = of_fwnode_handle(chg->dev->of_node);
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
 					   &batt_cfg);
@@ -2245,6 +2246,7 @@ static int smb5_init_hw(struct smb5 *chip)
 	case 0:
 		rc = smblib_masked_write(chg, CHGR_CFG2_REG,
 				CHARGER_INHIBIT_BIT, 0);
+		fallthrough;
 	default:
 		break;
 	}
@@ -2798,10 +2800,7 @@ static void smb5_create_debugfs(struct smb5 *chip)
 		pr_err("Couldn't create force_dc_psy_update file rc=%ld\n",
 			(long)file);
 
-	file = debugfs_create_u32("debug_mask", 0600, chip->dfs_root,
-			&__debug_mask);
-	if (IS_ERR_OR_NULL(file))
-		pr_err("Couldn't create debug_mask file rc=%ld\n", (long)file);
+	debugfs_create_u32("debug_mask", 0600, chip->dfs_root, &__debug_mask);
 }
 
 #else
@@ -2884,7 +2883,7 @@ static int smb5_init_typec_class(struct smb5 *chip)
 }
 
 static int smb5_of_xlate(struct iio_dev *indio_dev,
-				const struct of_phandle_args *iiospec)
+				const struct fwnode_reference_args *iiospec)
 {
 	struct smb5 *iio_chip = iio_priv(indio_dev);
 	struct iio_chan_spec *iio_chan = iio_chip->iio_chan_ids;
@@ -2920,7 +2919,7 @@ static int smb5_write_raw(struct iio_dev *indio_dev,
 static const struct iio_info smb5_iio_info = {
 	.read_raw = smb5_read_raw,
 	.write_raw = smb5_write_raw,
-	.of_xlate = smb5_of_xlate,
+	.fwnode_xlate = smb5_of_xlate,
 };
 
 static int smb5_direct_iio_read(struct device *dev, int iio_chan_no, int *val)
@@ -2975,7 +2974,7 @@ static int smb5_iio_init(struct smb5 *chip, struct platform_device *pdev,
 	return rc;
 }
 
-int smb5_extcon_init(struct smb_charger *chg)
+static int smb5_extcon_init(struct smb_charger *chg)
 {
 	int rc;
 
@@ -3212,7 +3211,7 @@ cleanup:
 	return rc;
 }
 
-static int smb5_remove(struct platform_device *pdev)
+static void smb5_remove(struct platform_device *pdev)
 {
 	struct smb5 *chip = platform_get_drvdata(pdev);
 	struct smb_charger *chg = &chip->chg;
@@ -3225,8 +3224,6 @@ static int smb5_remove(struct platform_device *pdev)
 	smblib_deinit(chg);
 	sysfs_remove_groups(&chg->dev->kobj, smb5_groups);
 	platform_set_drvdata(pdev, NULL);
-
-	return 0;
 }
 
 static void smb5_shutdown(struct platform_device *pdev)

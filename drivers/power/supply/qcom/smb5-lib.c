@@ -1322,7 +1322,7 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	chg->uusb_apsd_rerun_done = false;
 	chg->chg_param.forced_main_fcc = 0;
 
-	del_timer_sync(&chg->apsd_timer);
+	timer_delete_sync(&chg->apsd_timer);
 	chg->apsd_ext_timeout = false;
 
 	/* write back the default FLOAT charger configuration */
@@ -3335,7 +3335,7 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 
 	rc = smblib_write(chg, DCIN_CMD_PON_REG, DCIN_PON_BIT | MID_CHG_BIT);
 	if (rc < 0) {
-		smblib_err(chg, "Couldn't write %d to DCIN_CMD_PON_REG rc=%d\n",
+		smblib_err(chg, "Couldn't write %lu to DCIN_CMD_PON_REG rc=%d\n",
 			DCIN_PON_BIT | MID_CHG_BIT, rc);
 		return rc;
 	}
@@ -3453,7 +3453,7 @@ int smblib_get_prop_usb_voltage_max_design(struct smb_charger *chg,
 			val->intval = MICRO_9V;
 			break;
 		}
-		/* else, fallthrough */
+		fallthrough;
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
 	case POWER_SUPPLY_TYPE_USB_PD:
@@ -3483,7 +3483,7 @@ int smblib_get_prop_usb_voltage_max(struct smb_charger *chg,
 			val->intval = MICRO_9V;
 			break;
 		}
-		/* else, fallthrough */
+		fallthrough;
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		if (chg->chg_param.smb_version == PMI632)
@@ -3515,6 +3515,7 @@ static int smblib_estimate_adaptor_voltage(struct smb_charger *chg,
 		break;
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
 		step_uv = HVDCP3P5_STEP_UV;
+		fallthrough;
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		val->intval = MICRO_5V + (step_uv * chg->pulse_cnt);
 		break;
@@ -4128,6 +4129,7 @@ int smblib_get_prop_input_voltage_settled(struct smb_charger *chg,
 	switch (chg->real_charger_type) {
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3P5:
 		step_uv = HVDCP3P5_STEP_UV;
+		fallthrough;
 	case QTI_POWER_SUPPLY_TYPE_USB_HVDCP_3:
 		rc = smblib_get_pulse_cnt(chg, &pulses);
 		if (rc < 0) {
@@ -5809,7 +5811,7 @@ static void smblib_handle_hvdcp_3p0_auth_done(struct smb_charger *chg,
 		if (!chg->apsd_ext_timeout &&
 				!timer_pending(&chg->apsd_timer)) {
 			smblib_dbg(chg, PR_MISC,
-				"APSD Extented timer started at %lld\n",
+				"APSD Extented timer started at %u\n",
 				jiffies_to_msecs(jiffies));
 
 			mod_timer(&chg->apsd_timer,
@@ -6022,7 +6024,7 @@ irqreturn_t smb5_usb_source_change_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
+void smblib_lpd_recheck_timer(struct alarm *alarm,
 						ktime_t time)
 {
 	int val;
@@ -6036,7 +6038,7 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
 				val, rc);
-			return ALARMTIMER_NORESTART;
+			return;
 		}
 		chg->moisture_present = false;
 		power_supply_changed(chg->usb_psy);
@@ -6047,14 +6049,14 @@ enum alarmtimer_restart smblib_lpd_recheck_timer(struct alarm *alarm,
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set TYPE_C_INTERRUPT_EN_CFG_2_REG rc=%d\n",
 					rc);
-			return ALARMTIMER_NORESTART;
+			return;
 		}
 	}
 
 	chg->lpd_stage = LPD_STAGE_NONE;
 	chg->lpd_reason = LPD_NONE;
 
-	return ALARMTIMER_NORESTART;
+	return;
 }
 
 #define RSBU_K_300K_UV	3000000
@@ -6480,7 +6482,7 @@ static void typec_src_removal(struct smb_charger *chg)
 
 	chg->typec_legacy = false;
 
-	del_timer_sync(&chg->apsd_timer);
+	timer_delete_sync(&chg->apsd_timer);
 	chg->apsd_ext_timeout = false;
 }
 
@@ -6832,7 +6834,7 @@ static void dcin_aicl_work(struct work_struct *work)
 	dcin_aicl(chg);
 }
 
-static enum alarmtimer_restart dcin_aicl_alarm_cb(struct alarm *alarm,
+static void dcin_aicl_alarm_cb(struct alarm *alarm,
 							ktime_t now)
 {
 	struct smb_charger *chg = container_of(alarm, struct smb_charger,
@@ -6843,7 +6845,7 @@ static enum alarmtimer_restart dcin_aicl_alarm_cb(struct alarm *alarm,
 	pm_stay_awake(chg->dev);
 	schedule_work(&chg->dcin_aicl_work);
 
-	return ALARMTIMER_NORESTART;
+	return;
 }
 
 static void dcin_icl_decrement(struct smb_charger *chg)
@@ -7624,7 +7626,7 @@ out:
 	vote(chg->awake_votable, MOISTURE_VOTER, false, 0);
 }
 
-static enum alarmtimer_restart moisture_protection_alarm_cb(struct alarm *alarm,
+static void moisture_protection_alarm_cb(struct alarm *alarm,
 							ktime_t now)
 {
 	struct smb_charger *chg = container_of(alarm, struct smb_charger,
@@ -7637,7 +7639,7 @@ static enum alarmtimer_restart moisture_protection_alarm_cb(struct alarm *alarm,
 	pm_stay_awake(chg->dev);
 	schedule_work(&chg->moisture_protection_work);
 
-	return ALARMTIMER_NORESTART;
+	return;
 }
 
 static void smblib_chg_termination_work(struct work_struct *work)
@@ -7790,7 +7792,7 @@ out:
 	vote(chg->awake_votable, CHG_TERMINATION_VOTER, false, 0);
 }
 
-static enum alarmtimer_restart chg_termination_alarm_cb(struct alarm *alarm,
+static void chg_termination_alarm_cb(struct alarm *alarm,
 								ktime_t now)
 {
 	struct smb_charger *chg = container_of(alarm, struct smb_charger,
@@ -7803,7 +7805,7 @@ static enum alarmtimer_restart chg_termination_alarm_cb(struct alarm *alarm,
 	pm_stay_awake(chg->dev);
 	schedule_work(&chg->chg_termination_work);
 
-	return ALARMTIMER_NORESTART;
+	return;
 }
 
 static void apsd_timer_cb(struct timer_list *tm)
@@ -7811,7 +7813,7 @@ static void apsd_timer_cb(struct timer_list *tm)
 	struct smb_charger *chg = container_of(tm, struct smb_charger,
 							apsd_timer);
 
-	smblib_dbg(chg, PR_MISC, "APSD Extented timer timeout at %lld\n",
+	smblib_dbg(chg, PR_MISC, "APSD Extented timer timeout at %u\n",
 			jiffies_to_msecs(jiffies));
 
 	chg->apsd_ext_timeout = true;
@@ -8503,7 +8505,7 @@ int smblib_deinit(struct smb_charger *chg)
 			alarm_cancel(&chg->chg_termination_alarm);
 			cancel_work_sync(&chg->chg_termination_work);
 		}
-		del_timer_sync(&chg->apsd_timer);
+		timer_delete_sync(&chg->apsd_timer);
 		cancel_work_sync(&chg->bms_update_work);
 		cancel_work_sync(&chg->jeita_update_work);
 		cancel_work_sync(&chg->pl_update_work);

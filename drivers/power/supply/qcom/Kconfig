@@ -6,7 +6,7 @@ menuconfig QCOM_POWER_SUPPLY
 if QCOM_POWER_SUPPLY
 
 config QPNP_QG
-	tristate "QPNP Qgauge driver"
+	bool "QPNP Qgauge driver"
 	depends on MFD_SPMI_PMIC
 	depends on IIO
 	help
@@ -15,11 +15,8 @@ config QPNP_QG
 	  to determine the battery state-of-charge (SOC) and supports other
 	  battery management features.
 
-	  To compile this driver as a module, choose M here: the
-	  module will be called qcom-qpnp-qg.
-
 config QPNP_SMB5
-	tristate "SMB5 Battery Charger"
+	bool "SMB5 Battery Charger"
 	depends on MFD_SPMI_PMIC && IIO && TYPEC
 	help
 	  Say Y to enables support for the SMB5 charging peripheral.
@@ -30,8 +27,5 @@ config QPNP_SMB5
 	  as fuel gauge, USB, and USB-PD.
 	  VBUS and VCONN regulators are registered for supporting OTG,
 	  and powered Type-C cables respectively.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called qpnp-smb5-main.
 
 endif

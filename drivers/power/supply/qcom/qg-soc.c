@@ -408,7 +408,7 @@ int qg_adjust_sys_soc(struct qpnp_qg *chip)
 		rc = qg_get_vbat_avg(chip, &vbat_uv);
 		if (!rc && (vbat_uv >= (vcutoff_uv + VBAT_LOW_HYST_UV))) {
 			soc = 1;
-			qg_dbg(chip, QG_DEBUG_SOC, "vbat_uv=%duV holding SOC to 1%\n",
+			qg_dbg(chip, QG_DEBUG_SOC, "vbat_uv=%duV holding SOC to 1%%\n",
 						vbat_uv);
 		}
 	}
@@ -621,7 +621,7 @@ done:
 	mutex_unlock(&chip->soc_lock);
 }
 
-static enum alarmtimer_restart
+static void
 	qpnp_msoc_timer(struct alarm *alarm, ktime_t now)
 {
 	struct qpnp_qg *chip = container_of(alarm,
@@ -631,7 +631,7 @@ static enum alarmtimer_restart
 	pm_stay_awake(chip->dev);
 	schedule_work(&chip->scale_soc_work);
 
-	return ALARMTIMER_NORESTART;
+	return;
 }
 
 int qg_scale_soc(struct qpnp_qg *chip, bool force_soc)

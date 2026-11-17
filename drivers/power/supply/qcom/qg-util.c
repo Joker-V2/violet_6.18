@@ -219,7 +219,7 @@ int get_rtc_time(unsigned long *rtc_time)
 				CONFIG_RTC_HCTOSYS_DEVICE, rc);
 		goto close_time;
 	}
-	rtc_tm_to_time(&tm, rtc_time);
+	*rtc_time = rtc_tm_to_time64(&tm);
 
 close_time:
 	rtc_class_close(rtc);
@@ -368,6 +368,8 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 		pr_err("Failed reading BAT_TEMP over ADC rc=%d\n", rc);
 		return rc;
 	}
+	/* The mainline ADC5 driver reports millidegrees */
+	*temp /= 100;
 	pr_debug("batt_temp = %d\n", *temp);
 
 	return 0;

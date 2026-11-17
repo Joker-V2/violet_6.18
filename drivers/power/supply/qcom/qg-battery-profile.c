@@ -297,7 +297,7 @@ static int qg_parse_battery_profile(struct qg_battery_data *battery)
 			goto cleanup;
 		}
 
-		strlcpy(battery->profile[i].name, table[i].table_name,
+		strscpy(battery->profile[i].name, table[i].table_name,
 						strlen(table[i].table_name));
 		battery->profile[i].rows = rows;
 		battery->profile[i].cols = cols;
@@ -458,7 +458,7 @@ int qg_batterydata_init(struct device_node *profile_node)
 			goto unregister_chrdev;
 		}
 
-		battery->battery_class = class_create(THIS_MODULE,
+		battery->battery_class = class_create(
 							"qg_battery");
 		if (IS_ERR_OR_NULL(battery->battery_class)) {
 			pr_err("Failed to create qg-battery class\n");
