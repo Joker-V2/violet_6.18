@@ -1376,6 +1376,40 @@ static const struct power_supply_desc batt_psy_desc = {
 	.property_is_writeable = smb5_batt_prop_is_writeable,
 };
 
+/* For the charging control of the health HAL */
+static ssize_t charging_enabled_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct smb_charger *chg = power_supply_get_drvdata(dev_get_drvdata(dev));
+
+	return sysfs_emit(buf, "%d\n",
+			  !get_effective_result(chg->chg_disable_votable));
+}
+
+static ssize_t charging_enabled_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct smb_charger *chg = power_supply_get_drvdata(dev_get_drvdata(dev));
+	bool enable;
+	int rc;
+
+	rc = kstrtobool(buf, &enable);
+	if (rc)
+		return rc;
+
+	rc = vote(chg->chg_disable_votable, USER_VOTER, !enable, 0);
+
+	return rc < 0 ? rc : count;
+}
+static DEVICE_ATTR_RW(charging_enabled);
+
+static struct attribute *smb5_batt_attrs[] = {
+	&dev_attr_charging_enabled.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(smb5_batt);
+
 static int smb5_init_batt_psy(struct smb5 *chip)
 {
 	struct power_supply_config batt_cfg = {};
@@ -1383,6 +1417,7 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 	int rc = 0;
 
 	batt_cfg.drv_data = chg;
+	batt_cfg.attr_grp = smb5_batt_groups;
 	batt_cfg.fwnode = of_fwnode_handle(chg->dev->of_node);
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
