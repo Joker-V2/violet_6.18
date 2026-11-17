@@ -8,272 +8,164 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/err.h>
-#include <linux/delay.h>
+#include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/of_device.h>
-#include <linux/sysfs.h>
 #include <linux/remoteproc.h>
+#include <linux/slab.h>
+#include <linux/sysfs.h>
 
 #define BOOT_CMD 1
 #define IMAGE_UNLOAD_CMD 0
 
-#define CDSP_SUBSYS_DOWN 0
-#define CDSP_SUBSYS_LOADED 1
-
-static ssize_t cdsp_boot_store(struct kobject *kobj,
-	struct kobj_attribute *attr,
-	const char *buf, size_t count);
-
+/*
+ * One loader per DSP: the "qcom,proc-img-to-load" name ("adsp", "cdsp")
+ * picks the /sys/kernel/boot_<name>/boot node the vendor init writes to.
+ */
 struct cdsp_loader_private {
-	void *pil_h;
-	struct kobject *boot_cdsp_obj;
-	struct attribute_group *attr_group;
-};
-
-static struct kobj_attribute cdsp_boot_attribute =
-	__ATTR(boot, 0220, NULL, cdsp_boot_store);
-
-static struct attribute *attrs[] = {
-	&cdsp_boot_attribute.attr,
-	NULL,
-};
-
-static u32 cdsp_state = CDSP_SUBSYS_DOWN;
-static struct platform_device *cdsp_private;
-static void cdsp_loader_unload(struct platform_device *pdev);
-
-static int cdsp_loader_do(struct platform_device *pdev)
-{
-	struct cdsp_loader_private *priv = NULL;
-	phandle rproc_phandle;
-	int rc = 0, sz = 0;
+	struct device *dev;
+	struct rproc *rproc;
+	struct kobject *boot_obj;
+	struct kobj_attribute boot_attr;
+	struct attribute *attrs[2];
+	struct attribute_group attr_group;
+	struct mutex lock;
 	const char *img_name;
+	bool booted;
+};
 
-	if (!pdev) {
-		pr_err("%s: Platform device null\n", __func__);
-		goto fail;
+static int cdsp_loader_do(struct cdsp_loader_private *priv)
+{
+	int rc = 0;
+
+	mutex_lock(&priv->lock);
+	if (!priv->booted) {
+		dev_dbg(priv->dev, "calling rproc_boot on %s\n", priv->img_name);
+		rc = rproc_boot(priv->rproc);
+		if (rc)
+			dev_err(priv->dev, "%s: rproc_boot failed with error %d\n",
+				priv->img_name, rc);
+		else
+			priv->booted = true;
 	}
+	mutex_unlock(&priv->lock);
 
-	if (!pdev->dev.of_node) {
-		dev_err(&pdev->dev,
-			"%s: Device tree information missing\n", __func__);
-		goto fail;
-	}
-
-	rc = of_property_read_string(pdev->dev.of_node,
-					"qcom,proc-img-to-load",
-					&img_name);
-	if (rc)
-		goto fail;
-
-	if (!strcmp(img_name, "cdsp")) {
-		/* cdsp_state always returns "0".*/
-		if (cdsp_state == CDSP_SUBSYS_DOWN) {
-			priv = platform_get_drvdata(pdev);
-			if (!priv) {
-				dev_err(&pdev->dev,
-					"%s: Private data get failed\n", __func__);
-				goto fail;
-			}
-
-			sz = of_property_read_u32(pdev->dev.of_node, "qcom,rproc-handle",
-					&rproc_phandle);
-			if (sz) {
-				pr_err("%s: of_property_read failed, returned value %d\n",
-						__func__, sz);
-				dev_err(&pdev->dev, "error reading rproc phandle\n");
-				goto fail;
-			}
-
-			priv->pil_h = rproc_get_by_phandle(rproc_phandle);
-			if (!priv->pil_h) {
-				dev_err(&pdev->dev, "rproc not found\n");
-				goto fail;
-			}
-
-			dev_dbg(&pdev->dev, "%s: calling rproc_boot on %s\n",
-					__func__, img_name);
-			rc = rproc_boot(priv->pil_h);
-			if (rc) {
-				dev_err(&pdev->dev, "%s: rproc_boot failed with error %d\n",
-					__func__, rc);
-				goto fail;
-			}
-
-			/* Set the state of the CDSP.*/
-			cdsp_state = CDSP_SUBSYS_LOADED;
-		} else if (cdsp_state == CDSP_SUBSYS_LOADED) {
-			dev_dbg(&pdev->dev,
-			"%s: CDSP state = 0x%x\n", __func__, cdsp_state);
-		}
-
-		dev_dbg(&pdev->dev, "%s: CDSP image is loaded\n", __func__);
-		return rc;
-	}
-
-fail:
-	if (pdev)
-		dev_err(&pdev->dev,
-			"%s: CDSP image loading failed\n", __func__);
 	return rc;
 }
 
+static void cdsp_loader_unload(struct cdsp_loader_private *priv)
+{
+	mutex_lock(&priv->lock);
+	if (priv->booted) {
+		dev_dbg(priv->dev, "calling rproc_shutdown on %s\n",
+			priv->img_name);
+		rproc_shutdown(priv->rproc);
+		priv->booted = false;
+	}
+	mutex_unlock(&priv->lock);
+}
 
 static ssize_t cdsp_boot_store(struct kobject *kobj,
-	struct kobj_attribute *attr,
-	const char *buf,
-	size_t count)
+	struct kobj_attribute *attr, const char *buf, size_t count)
 {
-	int ret = 0;
-	uint32_t boot = 0;
+	struct cdsp_loader_private *priv =
+		container_of(attr, struct cdsp_loader_private, boot_attr);
+	u32 boot = 0;
+	int ret;
 
 	ret = kstrtou32(buf, 0, &boot);
-	if (ret) {
-		pr_debug("%s: invalid arguments for cdsp_loader.\n", __func__);
+	if (ret)
 		return ret;
-	}
 
-	if (boot == BOOT_CMD) {
-		pr_debug("%s: going to call cdsp_loader_do\n", __func__);
-		cdsp_loader_do(cdsp_private);
-	} else if (boot == IMAGE_UNLOAD_CMD) {
-		pr_debug("%s: going to call cdsp_unloader\n", __func__);
-		cdsp_loader_unload(cdsp_private);
-	}
+	if (boot == BOOT_CMD)
+		cdsp_loader_do(priv);
+	else if (boot == IMAGE_UNLOAD_CMD)
+		cdsp_loader_unload(priv);
+
 	return count;
 }
 
-static void cdsp_loader_unload(struct platform_device *pdev)
+static int cdsp_loader_init_sysfs(struct cdsp_loader_private *priv)
 {
-	struct cdsp_loader_private *priv = NULL;
+	char *name;
+	int ret;
 
-	priv = platform_get_drvdata(pdev);
+	sysfs_attr_init(&priv->boot_attr.attr);
+	priv->boot_attr.attr.name = "boot";
+	priv->boot_attr.attr.mode = 0220;
+	priv->boot_attr.store = cdsp_boot_store;
+	priv->attrs[0] = &priv->boot_attr.attr;
+	priv->attr_group.attrs = priv->attrs;
 
-	if (!priv)
-		return;
+	name = devm_kasprintf(priv->dev, GFP_KERNEL, "boot_%s", priv->img_name);
+	if (!name)
+		return -ENOMEM;
 
-	if (priv->pil_h) {
-		dev_dbg(&pdev->dev, "%s: calling subsystem_put\n", __func__);
-		rproc_shutdown(priv->pil_h);
-		priv->pil_h = NULL;
-		cdsp_state = CDSP_SUBSYS_DOWN;
-	}
-}
+	priv->boot_obj = kobject_create_and_add(name, kernel_kobj);
+	if (!priv->boot_obj)
+		return -ENOMEM;
 
-static int cdsp_loader_init_sysfs(struct platform_device *pdev)
-{
-	int ret = -EINVAL;
-	struct cdsp_loader_private *priv = NULL;
-
-	cdsp_private = NULL;
-
-	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		return ret;
-	}
-
-	platform_set_drvdata(pdev, priv);
-
-	priv->pil_h = NULL;
-	priv->boot_cdsp_obj = NULL;
-	priv->attr_group = devm_kzalloc(&pdev->dev,
-				sizeof(*(priv->attr_group)),
-				GFP_KERNEL);
-	if (!priv->attr_group) {
-		ret = -ENOMEM;
-		goto error_return;
-	}
-
-	priv->attr_group->attrs = attrs;
-
-	priv->boot_cdsp_obj = kobject_create_and_add("boot_cdsp", kernel_kobj);
-	if (!priv->boot_cdsp_obj) {
-		dev_err(&pdev->dev, "%s: sysfs create and add failed\n",
-						__func__);
-		ret = -ENOMEM;
-		goto error_return;
-	}
-
-	ret = sysfs_create_group(priv->boot_cdsp_obj, priv->attr_group);
+	ret = sysfs_create_group(priv->boot_obj, &priv->attr_group);
 	if (ret) {
-		dev_err(&pdev->dev, "%s: sysfs create group failed %d\n",
-							__func__, ret);
-		goto error_return;
+		kobject_put(priv->boot_obj);
+		priv->boot_obj = NULL;
 	}
 
-	cdsp_private = pdev;
-
-	return 0;
-
-error_return:
-
-	if (priv->boot_cdsp_obj) {
-		kobject_del(priv->boot_cdsp_obj);
-		priv->boot_cdsp_obj = NULL;
-	}
-	if (ret)
-		dev_err(&pdev->dev, "%s failed with ret %d\n",
-						__func__, ret);
 	return ret;
 }
 
-static int cdsp_loader_remove(struct platform_device *pdev)
+static void cdsp_loader_remove(struct platform_device *pdev)
 {
-	struct cdsp_loader_private *priv = NULL;
+	struct cdsp_loader_private *priv = platform_get_drvdata(pdev);
 
-	priv = platform_get_drvdata(pdev);
-
-	if (!priv)
-		return 0;
-
-	if (priv->pil_h) {
-		rproc_shutdown(priv->pil_h);
-		priv->pil_h = NULL;
-		cdsp_state = CDSP_SUBSYS_DOWN;
-	}
-
-	if (priv->boot_cdsp_obj) {
-		sysfs_remove_group(priv->boot_cdsp_obj, priv->attr_group);
-		kobject_del(priv->boot_cdsp_obj);
-		priv->boot_cdsp_obj = NULL;
-	}
-
-	return 0;
+	sysfs_remove_group(priv->boot_obj, &priv->attr_group);
+	kobject_put(priv->boot_obj);
+	cdsp_loader_unload(priv);
+	rproc_put(priv->rproc);
 }
 
 static int cdsp_loader_probe(struct platform_device *pdev)
 {
+	struct cdsp_loader_private *priv;
 	phandle rproc_phandle;
-	struct property *prop = NULL;
-	int size = 0;
-	struct rproc *cdsp = NULL;
-	int ret = 0;
+	int ret;
 
-	prop = of_find_property(pdev->dev.of_node, "qcom,rproc-handle", &size);
-	if (!prop) {
-		dev_err(&pdev->dev, "%s: error reading rproc phandle\n", __func__);
-		return -ENOPARAM;
-	}
+	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
 
-	rproc_phandle = be32_to_cpup(prop->value);
-	cdsp = rproc_get_by_phandle(rproc_phandle);
-	if (!cdsp) {
-		dev_err(&pdev->dev, "%s: rproc not found\n", __func__);
+	priv->dev = &pdev->dev;
+	mutex_init(&priv->lock);
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				      "qcom,proc-img-to-load", &priv->img_name);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "error reading qcom,proc-img-to-load\n");
+
+	ret = of_property_read_u32(pdev->dev.of_node, "qcom,rproc-handle",
+				   &rproc_phandle);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "error reading rproc phandle\n");
+
+	priv->rproc = rproc_get_by_phandle(rproc_phandle);
+	if (!priv->rproc)
 		return -EPROBE_DEFER;
+
+	ret = cdsp_loader_init_sysfs(priv);
+	if (ret) {
+		rproc_put(priv->rproc);
+		return dev_err_probe(&pdev->dev, ret, "error in initing sysfs\n");
 	}
 
-	ret = cdsp_loader_init_sysfs(pdev);
-
-	if (ret != 0) {
-		dev_err(&pdev->dev, "%s: Error in initing sysfs\n", __func__);
-		return ret;
-	}
+	platform_set_drvdata(pdev, priv);
 
 	return 0;
 }
 
 static const struct of_device_id cdsp_loader_dt_match[] = {
+	{ .compatible = "qcom,adsp-loader" },
 	{ .compatible = "qcom,cdsp-loader" },
 	{ }
 };
@@ -287,18 +179,7 @@ static struct platform_driver cdsp_loader_driver = {
 	.probe = cdsp_loader_probe,
 	.remove = cdsp_loader_remove,
 };
-
-static int __init cdsp_loader_init(void)
-{
-	return platform_driver_register(&cdsp_loader_driver);
-}
-module_init(cdsp_loader_init);
-
-static void __exit cdsp_loader_exit(void)
-{
-	platform_driver_unregister(&cdsp_loader_driver);
-}
-module_exit(cdsp_loader_exit);
+module_platform_driver(cdsp_loader_driver);
 
 MODULE_DESCRIPTION("CDSP Loader module");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

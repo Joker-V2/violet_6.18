@@ -220,10 +220,13 @@ config QCOM_SMSM
 	  The state machine is represented by bits in shared memory.
 
 config QCOM_CDSP_LOADER
-	tristate "Qualcomm CDSP loader"
+	tristate "Qualcomm ADSP and CDSP loader"
 	depends on REMOTEPROC
 	help
-	  Boot the CDSP when userspace writes 1 to /sys/kernel/boot_cdsp/boot.
+	  Boot a DSP through remoteproc when userspace writes 1 to
+	  /sys/kernel/boot_adsp/boot or /sys/kernel/boot_cdsp/boot, as the
+	  Android vendor init of downstream kernels does once the firmware
+	  partitions are mounted.
 
 config QCOM_SOCINFO
 	tristate "Qualcomm socinfo driver"
