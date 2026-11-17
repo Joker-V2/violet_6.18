@@ -283,11 +283,18 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		/*
+		 * The panel's and the touch's 1.8 V I/O, and the pull-ups of
+		 * the touch I2C bus: keep it on, or the touch driver turns it
+		 * off after probing, before the display has taken it.
+		 */
 		vreg_l13a_1p8: ldo13 {
 			regulator-name = "vreg_l13a_1p8";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1900000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+			regulator-always-on;
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
 						   RPMH_REGULATOR_MODE_HPM>;
@@ -405,6 +412,29 @@
 	firmware-name = "a612_zap.mdt";
 };
 
+&i2c1 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	/* The touch part of the NT36672A TDDI on the Shenchao panel */
+	touchscreen@1 {
+		compatible = "novatek,nt36672a-ts";
+		reg = <0x01>;
+
+		interrupts-extended = <&tlmm 89 IRQ_TYPE_EDGE_RISING>;
+		reset-gpios = <&tlmm 88 GPIO_ACTIVE_LOW>;
+
+		iovcc-supply = <&vreg_l13a_1p8>;
+
+		pinctrl-0 = <&ts_int_default &ts_reset_default>;
+		pinctrl-1 = <&ts_int_sleep &ts_reset_sleep>;
+		pinctrl-names = "default", "sleep";
+
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2340>;
+	};
+};
+
 &mdss_dsi0 {
 	vdda-1p2-supply = <&vreg_l3c_1p2>;
 	status = "okay";
@@ -440,6 +470,10 @@
 	qcom,cabc-sel = <1>;
 	qcom,auto-string-detection;
 
+	status = "okay";
+};
+
+&qupv3_id_0 {
 	status = "okay";
 };
 
@@ -483,4 +517,36 @@
 
 &tlmm {
 	gpio-reserved-ranges = <0 4>;
+
+	ts_reset_default: ts-reset-default-state {
+		pins = "gpio88";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+		output-high;
+	};
+
+	ts_reset_sleep: ts-reset-sleep-state {
+		pins = "gpio88";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-low;
+	};
+
+	ts_int_default: ts-int-default-state {
+		pins = "gpio89";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+		output-disable;
+	};
+
+	ts_int_sleep: ts-int-sleep-state {
+		pins = "gpio89";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		output-disable;
+	};
 };
