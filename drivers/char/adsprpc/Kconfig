@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config MSM_ADSPRPC
+	bool "Qualcomm FastRPC driver"
+	depends on ARCH_QCOM && RPMSG && QCOM_SCM
+	help
+	  Provides the /dev/adsprpc-smd and /dev/cdsprpc-smd interfaces that
+	  the vendor FastRPC user library uses to call into the ADSP and the
+	  CDSP.
