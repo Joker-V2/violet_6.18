@@ -1468,6 +1468,7 @@ static const struct of_device_id qcom_pas_of_match[] = {
 	{ .compatible = "qcom,qcs404-adsp-pas", .data = &adsp_resource_init },
 	{ .compatible = "qcom,qcs404-cdsp-pas", .data = &cdsp_resource_init },
 	{ .compatible = "qcom,qcs404-wcss-pas", .data = &wcss_resource_init },
+	{ .compatible = "qcom,qcs615-mpss-pas", .data = &mpss_resource_init},
 	{ .compatible = "qcom,sa8775p-adsp-pas", .data = &sa8775p_adsp_resource},
 	{ .compatible = "qcom,sa8775p-cdsp0-pas", .data = &sa8775p_cdsp0_resource},
 	{ .compatible = "qcom,sa8775p-cdsp1-pas", .data = &sa8775p_cdsp1_resource},
