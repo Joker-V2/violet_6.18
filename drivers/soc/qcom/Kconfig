@@ -228,6 +228,14 @@ config QCOM_SUBSYS_COMPAT
 	  peripheral manager of Android vendors built for those kernels can
 	  find and boot the modem.
 
+config QCOM_RMTFS_UIO
+	tristate "Qualcomm remote filesystem memory over UIO"
+	depends on UIO && QCOM_SCM
+	help
+	  Expose the modem's remote filesystem memory as a UIO device named
+	  "rmtfs", for the rmt_storage daemon of Android vendors built for
+	  downstream kernels.
+
 config QCOM_CDSP_LOADER
 	tristate "Qualcomm ADSP and CDSP loader"
 	depends on REMOTEPROC

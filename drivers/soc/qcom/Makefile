@@ -30,6 +30,7 @@ obj-$(CONFIG_QCOM_SMP2P)	+= smp2p.o
 obj-$(CONFIG_QCOM_SMSM)	+= smsm.o
 obj-$(CONFIG_QCOM_CDSP_LOADER)	+= cdsp-loader.o
 obj-$(CONFIG_QCOM_SUBSYS_COMPAT)	+= subsys-compat.o
+obj-$(CONFIG_QCOM_RMTFS_UIO)	+= rmtfs-uio.o
 obj-$(CONFIG_QCOM_SOCINFO)	+= socinfo.o
 obj-$(CONFIG_QCOM_SPM)		+= spm.o
 obj-$(CONFIG_QCOM_STATS)	+= qcom_stats.o
