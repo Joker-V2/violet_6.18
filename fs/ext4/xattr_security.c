@@ -17,6 +17,9 @@ ext4_xattr_security_get(const struct xattr_handler *handler,
 			struct dentry *unused, struct inode *inode,
 			const char *name, void *buffer, size_t size)
 {
+	if (strcmp(name, "sehash") == 0 &&
+	    test_opt2(inode->i_sb, NO_SEHASH_XATTR))
+		return 0;
 	return ext4_xattr_get(inode, EXT4_XATTR_INDEX_SECURITY,
 			      name, buffer, size);
 }
@@ -28,6 +31,9 @@ ext4_xattr_security_set(const struct xattr_handler *handler,
 			const char *name, const void *value,
 			size_t size, int flags)
 {
+	if (strcmp(name, "sehash") == 0 &&
+	    test_opt2(inode->i_sb, NO_SEHASH_XATTR))
+		return 0;
 	return ext4_xattr_set(inode, EXT4_XATTR_INDEX_SECURITY,
 			      name, value, size, flags);
 }

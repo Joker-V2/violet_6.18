@@ -1657,7 +1657,7 @@ enum {
 	Opt_bsd_df, Opt_minix_df, Opt_grpid, Opt_nogrpid,
 	Opt_resgid, Opt_resuid, Opt_sb,
 	Opt_nouid32, Opt_debug, Opt_removed,
-	Opt_user_xattr, Opt_acl,
+	Opt_user_xattr, Opt_no_sehash_xattr, Opt_acl,
 	Opt_auto_da_alloc, Opt_noauto_da_alloc, Opt_noload,
 	Opt_commit, Opt_min_batch_time, Opt_max_batch_time, Opt_journal_dev,
 	Opt_journal_path, Opt_journal_checksum, Opt_journal_async_commit,
@@ -1739,6 +1739,7 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_flag	("oldalloc",		Opt_removed),
 	fsparam_flag	("orlov",		Opt_removed),
 	fsparam_flag	("user_xattr",		Opt_user_xattr),
+	fsparam_flag	("no_sehash_xattr",	Opt_no_sehash_xattr),
 	fsparam_flag	("acl",			Opt_acl),
 	fsparam_flag	("norecovery",		Opt_noload),
 	fsparam_flag	("noload",		Opt_noload),
@@ -1884,6 +1885,7 @@ static const struct mount_opts {
 	{Opt_journal_ioprio, 0, MOPT_NO_EXT2},
 	{Opt_data, 0, MOPT_NO_EXT2},
 	{Opt_user_xattr, EXT4_MOUNT_XATTR_USER, MOPT_SET},
+	{Opt_no_sehash_xattr, EXT4_MOUNT2_NO_SEHASH_XATTR, MOPT_SET | MOPT_2},
 #ifdef CONFIG_EXT4_FS_POSIX_ACL
 	{Opt_acl, EXT4_MOUNT_POSIX_ACL, MOPT_SET},
 #else
