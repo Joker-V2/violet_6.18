@@ -63,6 +63,12 @@ struct sde_hw_vbif_ops {
 	void (*set_axi_halt)(struct sde_hw_vbif *vbif);
 
 	/**
+	 * clear_axi_halt - release the axi port halt control
+	 * @vbif: vbif context driver
+	 */
+	void (*clear_axi_halt)(struct sde_hw_vbif *vbif);
+
+	/**
 	 * get_axi_halt_status - get axi port halt control status
 	 * @vbif: vbif context driver
 	 */

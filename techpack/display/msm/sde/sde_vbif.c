@@ -670,6 +670,31 @@ void sde_vbif_axi_halt_request(struct sde_kms *sde_kms)
 	}
 }
 
+void sde_vbif_axi_halt_release(struct sde_kms *sde_kms)
+{
+	struct sde_hw_vbif *vbif;
+	int i;
+
+	if (!sde_kms) {
+		SDE_ERROR("invalid argument\n");
+		return;
+	}
+
+	if (!sde_kms_is_vbif_operation_allowed(sde_kms)) {
+		SDE_DEBUG("vbif operations not permitted\n");
+		return;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(sde_kms->hw_vbif); i++) {
+		vbif = sde_kms->hw_vbif[i];
+		if (vbif && vbif->cap && vbif->ops.clear_axi_halt) {
+			mutex_lock(&vbif->mutex);
+			vbif->ops.clear_axi_halt(vbif);
+			mutex_unlock(&vbif->mutex);
+		}
+	}
+}
+
 int sde_vbif_halt_xin_mask(struct sde_kms *sde_kms, u32 xin_id_mask,
 				bool halt)
 {

@@ -4736,6 +4736,15 @@ static void sde_kms_handle_power_event(u32 event_type, void *usr)
 		sde_irq_update(msm_kms, true);
 		sde_kms->first_kickoff = true;
 
+		/*
+		 * The AXI halt set before the last power down is only reset
+		 * if the MDSS GDSC collapsed in between, which it doesn't
+		 * have to: release it, or the DSI command DMA and the MDP
+		 * fetches stall behind it.
+		 */
+		if (!sde_in_trusted_vm(sde_kms))
+			sde_vbif_axi_halt_release(sde_kms);
+
 		/**
 		 * Rotator sid and hw fences need to be programmed since uefi doesn't
 		 * configure them during continuous splash

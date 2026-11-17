@@ -196,6 +196,14 @@ static void sde_hw_set_axi_halt(struct sde_hw_vbif *vbif)
 	wmb(); /* make sure that axi transactions are halted */
 }
 
+static void sde_hw_clear_axi_halt(struct sde_hw_vbif *vbif)
+{
+	struct sde_hw_blk_reg_map *c = &vbif->hw;
+
+	SDE_REG_WRITE(c, VBIF_AXI_HALT_CTRL0, 0);
+	wmb(); /* make sure that axi transactions are released */
+}
+
 static int sde_hw_get_axi_halt_status(struct sde_hw_vbif *vbif)
 {
 	struct sde_hw_blk_reg_map *c = &vbif->hw;
@@ -255,6 +263,7 @@ static void _setup_vbif_ops(const struct sde_mdss_cfg *m,
 	ops->set_limit_conf = sde_hw_set_limit_conf;
 	ops->get_limit_conf = sde_hw_get_limit_conf;
 	ops->set_axi_halt = sde_hw_set_axi_halt;
+	ops->clear_axi_halt = sde_hw_clear_axi_halt;
 	ops->get_axi_halt_status = sde_hw_get_axi_halt_status;
 	ops->set_xin_halt = sde_hw_set_xin_halt;
 	ops->get_xin_halt_status = sde_hw_get_xin_halt_status;
