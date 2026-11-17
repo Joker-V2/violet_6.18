@@ -219,6 +219,15 @@ config QCOM_SMSM
 	  Say yes here to support the Qualcomm Shared Memory State Machine.
 	  The state machine is represented by bits in shared memory.
 
+config QCOM_SUBSYS_COMPAT
+	tristate "Qualcomm downstream subsystem interface"
+	depends on REMOTEPROC
+	help
+	  Expose remote processors the way downstream kernels did, as
+	  /sys/bus/msm_subsys/devices/subsysN and /dev/subsys_<name>, so the
+	  peripheral manager of Android vendors built for those kernels can
+	  find and boot the modem.
+
 config QCOM_CDSP_LOADER
 	tristate "Qualcomm ADSP and CDSP loader"
 	depends on REMOTEPROC
