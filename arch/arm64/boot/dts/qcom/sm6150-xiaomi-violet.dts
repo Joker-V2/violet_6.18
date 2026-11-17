@@ -157,6 +157,16 @@
 			no-map;
 		};
 
+		/*
+		 * The framebuffer the bootloader leaves on screen, mapped 1:1
+		 * for the display from the moment the IOMMU takes it over.
+		 */
+		splash_fb_mem: splash-fb@9c000000 {
+			reg = <0x0 0x9c000000 0x0 0xa00000>;
+			iommu-addresses = <&smmu_sde_unsec 0x0 0x9c000000 0x0 0xa00000>;
+			no-map;
+		};
+
 		dfps_data_mem: dfps-data@9d000000 {
 			reg = <0x0 0x9d000000 0x0 0x100000>;
 			no-map;
@@ -467,6 +477,7 @@
  * raises an SError.
  */
 &smmu_sde_unsec {
+	memory-region = <&splash_fb_mem>;
 	status = "okay";
 };
 
