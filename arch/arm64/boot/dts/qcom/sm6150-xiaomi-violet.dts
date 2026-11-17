@@ -58,6 +58,18 @@
 		qcom,proc-img-to-load = "cdsp";
 	};
 
+	rmtfs-uio {
+		compatible = "qcom,rmtfs-uio";
+		qcom,size = <0x200000>;
+		qcom,vmid = <15>;
+	};
+
+	subsys-modem {
+		compatible = "qcom,subsys-compat";
+		qcom,rproc-handle = <&remoteproc_mpss>;
+		qcom,subsys-name = "modem";
+	};
+
 	qcom,msm-adsprpc-mem {
 		compatible = "qcom,msm-adsprpc-mem-region";
 		memory-region = <&adsp_mem>;
@@ -921,6 +933,11 @@
 };
 
 &remoteproc_cdsp {
+	status = "okay";
+};
+
+&remoteproc_mpss {
+	memory-region = <&mpss_mem>;
 	status = "okay";
 };
 
