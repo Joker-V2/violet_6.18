@@ -40,6 +40,23 @@
 	chosen {
 	};
 
+	/*
+	 * The vendor init boots the DSPs by writing 1 to
+	 * /sys/kernel/boot_adsp/boot and /sys/kernel/boot_cdsp/boot once
+	 * the modem partition, which holds their firmware, is mounted.
+	 */
+	adsp-loader {
+		compatible = "qcom,adsp-loader";
+		qcom,rproc-handle = <&remoteproc_adsp>;
+		qcom,proc-img-to-load = "adsp";
+	};
+
+	cdsp-loader {
+		compatible = "qcom,cdsp-loader";
+		qcom,rproc-handle = <&remoteproc_cdsp>;
+		qcom,proc-img-to-load = "cdsp";
+	};
+
 	firmware {
 		android {
 			compatible = "android,firmware";
@@ -474,6 +491,14 @@
 };
 
 &qupv3_id_0 {
+	status = "okay";
+};
+
+&remoteproc_adsp {
+	status = "okay";
+};
+
+&remoteproc_cdsp {
 	status = "okay";
 };
 
