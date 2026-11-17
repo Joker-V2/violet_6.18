@@ -187,10 +187,22 @@ static int msm_smmu_one_to_one_map(struct msm_mmu *mmu, uint32_t iova,
 {
 	struct msm_smmu *smmu = to_msm_smmu(mmu);
 	struct msm_smmu_client *client = msm_smmu_to_client(smmu);
+	uint32_t mapped;
 	int ret = 0;
 
 	if (!client || !client->domain)
 		return -ENODEV;
+
+	/*
+	 * The IOMMU core may already map the start of the splash 1:1, from
+	 * the moment it took the display over; drop that part and map it all.
+	 */
+	for (mapped = 0; mapped < size; mapped += SZ_4K)
+		if (iommu_iova_to_phys(client->domain, iova + mapped) !=
+		    dest_address + mapped)
+			break;
+	if (mapped)
+		iommu_unmap(client->domain, iova, mapped);
 
 	ret = iommu_map(client->domain, iova, dest_address,
 			size, prot, GFP_KERNEL);
