@@ -13,7 +13,6 @@
 
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
-#include <linux/qcom-dma-mapping.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
@@ -24,9 +23,7 @@
 #include <linux/list.h>
 #include <linux/arch_topology.h>
 #include <linux/hash.h>
-#include <linux/msm_ion.h>
-#include <linux/qcom_scm.h>
-#include <linux/ipc_logging.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/remoteproc/qcom_rproc.h>
 #include <linux/scatterlist.h>
 #include <linux/uaccess.h>
@@ -34,16 +31,13 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/dma-map-ops.h>
 #include <linux/cma.h>
 #include <linux/sort.h>
 #include <linux/cred.h>
-#include <linux/msm_dma_iommu_mapping.h>
 #include "adsprpc_compat.h"
 #include "adsprpc_shared.h"
-#include <soc/qcom/qcom_ramdump.h>
-#include <soc/qcom/minidump.h>
-#include <soc/qcom/secure_buffer.h>
 #include <linux/delay.h>
 #include <linux/debugfs.h>
 #include <linux/pm_qos.h>
@@ -52,11 +46,9 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/soc/qcom/pdr.h>
 #include <linux/soc/qcom/qmi.h>
-#include <linux/mem-buf.h>
 #include <linux/iommu.h>
 #include <asm/arch_timer.h>
 #include <linux/genalloc.h>
-#include <soc/qcom/socinfo.h>
 
 #ifdef CONFIG_HIBERNATION
 #include <linux/suspend.h>
@@ -71,6 +63,57 @@
 #else
 #include "fastrpc.h"
 #endif
+
+/*
+ * Downstream-only interfaces that this kernel does not have: no minidump,
+ * no ramdump of DSP memory, no mem-buf (every buffer belongs to HLOS) and
+ * no qcom-specific DMA attributes.
+ */
+#define DMA_ATTR_DELAYED_UNMAP	0
+#define DMA_ATTR_SYS_CACHE_ONLY	0
+#define MAX_NAME_LENGTH		12
+#define PART_NSP		0
+
+struct md_region {
+	char name[MAX_NAME_LENGTH];
+	u64 virt_addr;
+	u64 phys_addr;
+	u64 size;
+};
+
+static inline bool msm_minidump_enabled(void) { return false; }
+static inline int msm_minidump_add_region(const struct md_region *entry) { return -ENODEV; }
+static inline int msm_minidump_remove_region(const struct md_region *entry) { return -ENODEV; }
+
+struct qcom_dump_segment {
+	struct list_head node;
+	dma_addr_t da;
+	void *va;
+	size_t size;
+};
+
+static inline int qcom_elf_dump(struct list_head *segs, struct device *dev,
+				unsigned char class)
+{
+	return -ENODEV;
+}
+
+static inline int socinfo_get_part_info(int part) { return 0; }
+static inline bool dump_enabled(void) { return false; }
+
+static inline int mem_buf_dma_buf_get_vmperm(struct dma_buf *buf, const int **vmids,
+					     const int **perms, int *nr)
+{
+	static const int hlos_vmid = QCOM_SCM_VMID_HLOS;
+	static const int hlos_perm = QCOM_SCM_PERM_RWX;
+
+	*vmids = &hlos_vmid;
+	*perms = &hlos_perm;
+	*nr = 1;
+	return 0;
+}
+
+static inline int mem_buf_current_vmid(void) { return QCOM_SCM_VMID_HLOS; }
 
 #define TZ_PIL_PROTECT_MEM_SUBSYS_ID 0x0C
 #define TZ_PIL_CLEAR_PROTECT_MEM_SUBSYS_ID 0x0D
@@ -293,7 +336,7 @@ enum fastrpc_remote_subsys_state {
 #define DSPSIGNAL_VERBOSE(x, ...)
 /*#define DSPSIGNAL_VERBOSE ADSPRPC_INFO*/
 
-MODULE_IMPORT_NS(DMA_BUF);
+MODULE_IMPORT_NS("DMA_BUF");
 
 static struct dentry *debugfs_root;
 static struct dentry *debugfs_global_file;
@@ -8324,7 +8367,8 @@ static int fastrpc_cb_probe(struct device *dev)
 		}
 		/* Map the allocated memory with fixed IOVA and is shared to remote subsystem */
 		err = iommu_map_sg(domain, frpc_gen_addr_pool[0], sgt.sgl,
-					sgt.nents, IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE);
+					sgt.nents, IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE,
+					GFP_KERNEL);
 		if (err < 0) {
 			ADSPRPC_ERR("iommu_map_sg failed with err %d", err);
 			goto iommu_map_bail;
@@ -8971,10 +9015,11 @@ static struct device fastrpc_bus = {
 	.init_name	= "fastrpc"
 };
 
-static int fastrpc_bus_match(struct device *dev, struct device_driver *driver)
+static int fastrpc_bus_match(struct device *dev, const struct device_driver *driver)
 {
 	struct fastrpc_apps *me = &gfa;
-	struct fastrpc_driver *frpc_driver = to_fastrpc_driver(driver);
+	struct fastrpc_driver *frpc_driver =
+		to_fastrpc_driver((struct device_driver *)driver);
 	struct fastrpc_device *frpc_device = to_fastrpc_device(dev);
 	unsigned long irq_flags = 0;
 
@@ -9175,7 +9220,7 @@ static int __init fastrpc_device_init(void)
 				NUM_DEVICES));
 	if (err)
 		goto cdev_init_bail;
-	me->class = class_create(THIS_MODULE, "fastrpc");
+	me->class = class_create("fastrpc");
 	VERIFY(err, !IS_ERR(me->class));
 	if (err)
 		goto class_create_bail;
@@ -9216,9 +9261,12 @@ static int __init fastrpc_device_init(void)
 		me->channel[i].subsystemstate = SUBSYSTEM_UP;
 		me->channel[i].rh_dump_dev = NULL;
 		me->channel[i].nb.notifier_call = fastrpc_restart_notifier_cb;
-		me->channel[i].handle = qcom_register_ssr_notifier(
+		if (gcinfo[i].subsys)
+			me->channel[i].handle = qcom_register_ssr_notifier(
 							gcinfo[i].subsys,
 							&me->channel[i].nb);
+		else
+			me->channel[i].handle = NULL;
 		if (i == CDSP_DOMAIN_ID) {
 			me->channel[i].dev = me->non_secure_dev;
 #if !IS_ENABLED(CONFIG_MSM_ADSPRPC_TRUSTED)
@@ -9281,7 +9329,7 @@ static int __init fastrpc_device_init(void)
 	return 0;
 device_create_bail:
 	for (i = 0; i < NUM_CHANNELS; i++) {
-		if (me->channel[i].handle)
+		if (!IS_ERR_OR_NULL(me->channel[i].handle))
 			qcom_unregister_ssr_notifier(me->channel[i].handle,
 							&me->channel[i].nb);
 	}
@@ -9319,7 +9367,7 @@ static void __exit fastrpc_device_exit(void)
 	for (i = 0; i < NUM_CHANNELS; i++) {
 		if (i == CDSP_DOMAIN_ID)
 			kfree(me->channel[i].buf);
-		if (!gcinfo[i].name)
+		if (!gcinfo[i].name || IS_ERR_OR_NULL(me->channel[i].handle))
 			continue;
 		qcom_unregister_ssr_notifier(me->channel[i].handle,
 						&me->channel[i].nb);

@@ -7,7 +7,6 @@
 #include <linux/of.h>
 #include <linux/module.h>
 #include "fastrpc_trace.h"
-#include <trace/events/rproc_qcom.h>
 #include "adsprpc_shared.h"
 
 struct frpc_transport_session_control {
@@ -47,9 +46,11 @@ static inline int get_cid_from_rpdev(struct rpmsg_device *rpdev)
 	if (err)
 		return -ENODEV;
 
-	err = of_property_read_string(rpdev->dev.parent->of_node, "label",
-					&label);
-
+	/* the channel's node is labelled after the DSP; the edge may not be */
+	err = of_property_read_string(rpdev->dev.of_node, "label", &label);
+	if (err)
+		err = of_property_read_string(rpdev->dev.parent->of_node,
+					      "label", &label);
 	if (err)
 		label = rpdev->dev.parent->of_node->name;
 

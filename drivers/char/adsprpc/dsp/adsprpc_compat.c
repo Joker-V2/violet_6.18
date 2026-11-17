@@ -5,7 +5,6 @@
 #include <linux/compat.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <linux/msm_ion.h>
 #include <linux/slab.h>
 
 #include "adsprpc_compat.h"
